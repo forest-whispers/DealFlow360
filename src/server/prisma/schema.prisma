@@ -21,6 +21,12 @@ enum UserRole {
   CUSTOMER
 }
 
+enum CustomerTier {
+  BRONZE
+  SILVER
+  GOLD
+}
+
 model Organization {
   id   String @id @default(cuid())
   name String
@@ -40,6 +46,10 @@ model User {
   role         UserRole @default(SALES_REP)
   isActive     Boolean  @default(true)
 
+  // Customer-specific
+  customerTier    CustomerTier?
+  customerProfile Json?
+
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -48,4 +58,5 @@ model User {
 
   @@index([organizationId])
   @@index([organizationId, role])
+  @@index([organizationId, role, customerTier])
 }
