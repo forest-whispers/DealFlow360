@@ -144,6 +144,28 @@ export const CUSTOMER_TIER_META: Record<
 };
 
 // ==========================================
+// Billing Type & Interval UI Metadata
+// ==========================================
+export const BILLING_TYPE_META: Record<
+    string,
+    { label: string; variant: StatusVariant }
+> = {
+    ONE_TIME: { label: "One-Time", variant: "neutral" },
+    RECURRING: { label: "Recurring", variant: "info" },
+};
+
+export const BILLING_INTERVAL_META: Record<string, { label: string }> = {
+    MONTHLY: { label: "Monthly" },
+    QUARTERLY: { label: "Quarterly" },
+    YEARLY: { label: "Yearly" },
+};
+
+// Role permissions matching backend constants
+export const CUSTOMER_MANAGE_ROLES = ["ADMIN", "SALES_MANAGER", "SALES_REP"];
+export const CUSTOMER_STATUS_ROLES = ["ADMIN", "SALES_MANAGER"];
+export const PRODUCT_MANAGE_ROLES = ["ADMIN", "SALES_MANAGER"];
+
+// ==========================================
 // Role Display Metadata
 // ==========================================
 export const USER_ROLE_META: Record<

@@ -7,7 +7,7 @@ import {
     UnauthorizedError,
 } from "@/server/shared/errors/errors";
 
-import { setSessionCookie } from "./auth.session";
+import { setSessionCookie, getSessionPayload } from "./auth.session";
 
 import type {
     AuthenticatedUser,
@@ -19,27 +19,6 @@ export class AuthService {
     async signup(
         input: SignupInput,
     ): Promise<AuthenticatedUser> {
-        const existingUser =
-            await prisma.user.findUnique({
-                where: {
-                    email: input.email,
-                },
-                select: {
-                    id: true,
-                },
-            });
-
-        if (existingUser) {
-            throw new ConflictError(
-                "A user with this email already exists.",
-            );
-        }
-
-        const passwordHash = await bcrypt.hash(
-            input.password,
-            12,
-        );
-
         const existingOrganization =
             await prisma.organization.findUnique({
                 where: {
@@ -52,7 +31,28 @@ export class AuthService {
 
         let user: AuthenticatedUser;
 
+        const passwordHash = await bcrypt.hash(
+            input.password,
+            12,
+        );
+
         if (existingOrganization) {
+            const existingUser = await prisma.user.findFirst({
+                where: {
+                    email: input.email,
+                    organizationId: existingOrganization.id,
+                },
+                select: {
+                    id: true,
+                },
+            });
+
+            if (existingUser) {
+                throw new ConflictError(
+                    "A user with this email already exists in this organization.",
+                );
+            }
+
             user = await prisma.user.create({
                 data: {
                     name: input.name,
@@ -133,6 +133,13 @@ export class AuthService {
     async login(
         input: LoginInput,
     ): Promise<AuthenticatedUser> {
+        const existingSession = await getSessionPayload();
+
+        if (existingSession) {
+            throw new ConflictError(
+                "An active session already exists. Please log out before signing in.",
+            );
+        }
         const user =
             await prisma.user.findFirst({
                 where: {
