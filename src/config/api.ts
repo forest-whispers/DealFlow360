@@ -71,5 +71,12 @@ export const API_ROUTES = {
             `${API_BASE_URL}/quotations/${id}/lines/preview`,
         LINE_RECALCULATE: (id: string, lineNumber: number | string) =>
             `${API_BASE_URL}/quotations/${id}/lines/${lineNumber}`,
+        APPROVALS: (id: string) =>
+            `${API_BASE_URL}/quotations/${id}/approvals`,
+    },
+
+    APPROVALS: {
+        APPROVE: (id: string) => `${API_BASE_URL}/approvals/${id}/approve`,
+        REJECT: (id: string) => `${API_BASE_URL}/approvals/${id}/reject`,
     },
 } as const;

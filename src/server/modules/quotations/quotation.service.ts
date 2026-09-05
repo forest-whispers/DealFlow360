@@ -1,4 +1,7 @@
 import {
+    ApprovalRequestStatus,
+    ApprovalStepLevel,
+    ApprovalStepStatus,
     CustomerTier,
     Prisma,
     QuotationRevisionStatus,
@@ -1193,28 +1196,69 @@ export class QuotationService {
             finalRevisionStatus = QuotationRevisionStatus.APPROVED;
         }
 
-        // Freeze revision and update quotation status transactionally
-        await prisma.$transaction([
-            prisma.quotationRevision.update({
+        // Freeze revision, update quotation status, and conditionally create approval workflow transactionally
+        let createdApprovalRequestId: string | undefined;
+
+        await prisma.$transaction(async (tx) => {
+            await tx.quotationRevision.update({
                 where: { id: revision.id },
                 data: {
                     status: finalRevisionStatus,
                 },
-            }),
-            prisma.quotation.update({
+            });
+
+            await tx.quotation.update({
                 where: { id: quotation.id },
                 data: {
                     status: finalQuotationStatus,
                 },
-            }),
-        ]);
+            });
 
-        return {
+            if (finalQuotationStatus === QuotationStatus.PENDING_APPROVAL) {
+                const stepsData: Prisma.ApprovalStepCreateWithoutApprovalRequestInput[] = [
+                    {
+                        level: ApprovalStepLevel.SALES_MANAGER,
+                        status: ApprovalStepStatus.PENDING,
+                    },
+                ];
+
+                if (
+                    quotationEvaluation.approvalLevel ===
+                    DiscountApprovalLevel.FINANCE_OPERATIONS
+                ) {
+                    stepsData.push({
+                        level: ApprovalStepLevel.FINANCE_OPERATIONS,
+                        status: ApprovalStepStatus.PENDING,
+                    });
+                }
+
+                const approvalRequest = await tx.approvalRequest.create({
+                    data: {
+                        quotationId: quotation.id,
+                        revisionId: revision.id,
+                        status: ApprovalRequestStatus.PENDING,
+                        steps: {
+                            create: stepsData,
+                        },
+                    },
+                });
+
+                createdApprovalRequestId = approvalRequest.id;
+            }
+        });
+
+        const response: SubmitQuotationResponse = {
             status: finalQuotationStatus,
             approvalLevel: quotationEvaluation.approvalLevel,
             blendedRiskScore: quotationEvaluation.blendedRiskScore,
             lines: lineEvals,
         };
+
+        if (createdApprovalRequestId) {
+            response.approvalRequestId = createdApprovalRequestId;
+        }
+
+        return response;
     }
 }
 

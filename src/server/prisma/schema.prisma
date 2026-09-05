@@ -52,6 +52,23 @@ enum QuotationRevisionStatus {
   CONFIRMED
 }
 
+enum ApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ApprovalStepLevel {
+  SALES_MANAGER
+  FINANCE_OPERATIONS
+}
+
+enum ApprovalStepStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model Organization {
   id   String @id @default(cuid())
   name String
@@ -82,6 +99,8 @@ model User {
   customerProfile Json?
 
   customerQuotations Quotation[] @relation("CustomerQuotations")
+
+  approvalDecisions ApprovalStep[] @relation("ApprovalDecisions")
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -249,6 +268,8 @@ model QuotationRevision {
 
   lines QuotationLine[]
 
+  approvalRequests ApprovalRequest[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -270,6 +291,8 @@ model Quotation {
 
   revisions QuotationRevision[]
 
+  approvalRequests ApprovalRequest[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -277,4 +300,48 @@ model Quotation {
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([organizationId, customerId])
+}
+
+model ApprovalStep {
+  id String @id @default(cuid())
+
+  approvalRequestId String
+  approvalRequest   ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+
+  level  ApprovalStepLevel
+  status ApprovalStepStatus @default(PENDING)
+
+  decidedById String?
+  decidedBy   User?   @relation("ApprovalDecisions", fields: [decidedById], references: [id], onDelete: Restrict)
+
+  decidedAt DateTime?
+  reason    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([approvalRequestId])
+  @@index([level, status])
+  @@index([decidedById])
+}
+
+model ApprovalRequest {
+  id String @id @default(cuid())
+
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+
+  revisionId String
+  revision   QuotationRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+
+  status ApprovalRequestStatus @default(PENDING)
+
+  steps ApprovalStep[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([quotationId])
+  @@index([revisionId])
+  @@index([status])
 }

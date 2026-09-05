@@ -115,6 +115,7 @@ export interface SubmitQuotationResponse {
     approvalLevel: DiscountApprovalLevel;
     blendedRiskScore: number;
     lines: CanonicalLineEvaluationResult[];
+    approvalRequestId?: string;
 }
 
 export interface CreateQuotationInput {
