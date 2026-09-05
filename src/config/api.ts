@@ -59,4 +59,17 @@ export const API_ROUTES = {
                 `${API_BASE_URL}/discount-governance/category-rules/${id}`,
         },
     },
+
+    QUOTATIONS: {
+        LIST: `${API_BASE_URL}/quotations`,
+        CREATE: `${API_BASE_URL}/quotations`,
+        BY_ID: (id: string) => `${API_BASE_URL}/quotations/${id}`,
+        PREVIEW: (id: string) => `${API_BASE_URL}/quotations/${id}/preview`,
+        SAVE_DRAFT: (id: string) => `${API_BASE_URL}/quotations/${id}/draft`,
+        SUBMIT: (id: string) => `${API_BASE_URL}/quotations/${id}/submit`,
+        LINE_PREVIEW: (id: string) =>
+            `${API_BASE_URL}/quotations/${id}/lines/preview`,
+        LINE_RECALCULATE: (id: string, lineNumber: number | string) =>
+            `${API_BASE_URL}/quotations/${id}/lines/${lineNumber}`,
+    },
 } as const;
