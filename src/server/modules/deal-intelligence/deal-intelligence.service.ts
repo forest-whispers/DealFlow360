@@ -34,6 +34,22 @@ export class DealIntelligenceService {
 
         return calculateDealHealth(input);
     }
+
+    /**
+     * Resolves both authoritative DealContext and DealHealthResult in a single database read path.
+     * Prevents redundant round-trips when generating AI prompts.
+     */
+    async getDealIntelligence(
+        user: AuthenticatedUser,
+        quotationId: string,
+    ): Promise<{ context: DealContext; health: DealHealthResult }> {
+        const { dealContext, input } = await dealContextService.getDealContextData(
+            user,
+            quotationId,
+        );
+        const health = calculateDealHealth(input);
+        return { context: dealContext, health };
+    }
 }
 
 export const dealIntelligenceService = new DealIntelligenceService();
