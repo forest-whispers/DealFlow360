@@ -1,26 +1,80 @@
 @import "tailwindcss";
 
+@theme {
+  --color-app-bg: #F8FAFC;
+  --color-surface-primary: #FFFFFF;
+  --color-surface-secondary: #F1F5F9;
+
+  --color-border-subtle: #E2E8F0;
+  --color-border-interactive: #CBD5E1;
+
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94A3B8;
+
+  --color-accent-primary: #1E40AF;
+  --color-accent-hover: #1E3A8A;
+  --color-accent-tint: #EFF6FF;
+
+  /* Semantic status tokens */
+  --color-status-success-bg: #ECFDF5;
+  --color-status-success-border: #A7F3D0;
+  --color-status-success-text: #047857;
+
+  --color-status-warning-bg: #FFFBEB;
+  --color-status-warning-border: #FDE68A;
+  --color-status-warning-text: #B45309;
+
+  --color-status-danger-bg: #FEF2F2;
+  --color-status-danger-border: #FECACA;
+  --color-status-danger-text: #B91C1C;
+
+  --color-status-info-bg: #F0F9FF;
+  --color-status-info-border: #BAE6FD;
+  --color-status-info-text: #0369A1;
+
+  --font-sans: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #F8FAFC;
+  --foreground: #0F172A;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Strictly Light Mode Only - Enterprise B2B standard */
+html {
+  color-scheme: light;
+  background-color: #F8FAFC;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #F8FAFC;
+  color: #0F172A;
+  font-family: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Numeric precision for financial figures and quantities */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar styling for dense enterprise views */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
 }
