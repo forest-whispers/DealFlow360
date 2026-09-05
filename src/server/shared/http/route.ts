@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { AppError } from "../errors/appError";
+import { AppError } from "../errors/AppError";
 import { ZodError } from "zod";
 
 type RouteContext = {

@@ -13,6 +13,39 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Init {
-  id String @id @default(uuid())
+enum UserRole {
+  ADMIN
+  SALES_REP
+  SALES_MANAGER
+  FINANCE_OPERATIONS
+  CUSTOMER
+}
+
+model Organization {
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+
+  users User[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(SALES_REP)
+  isActive     Boolean  @default(true)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, role])
 }
