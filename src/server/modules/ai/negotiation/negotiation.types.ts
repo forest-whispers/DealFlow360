@@ -10,7 +10,12 @@ import {
     DiscountApprovalLevel,
     EvaluationStatus,
 } from "@/server/modules/discount-governance/discount-governance.constants";
-import type { CustomerTier, QuotationRevisionStatus, QuotationStatus } from "@prisma/client";
+import type {
+    CustomerTier,
+    NegotiationStatus,
+    QuotationRevisionStatus,
+    QuotationStatus,
+} from "@prisma/client";
 import type { Decimal } from "@prisma/client/runtime/library";
 
 export const NegotiationInterpretationStatus = {
@@ -156,4 +161,61 @@ export interface ResolvedNegotiationQuotation {
         customerTier: CustomerTier | null;
     } | null;
     revisions: ResolvedNegotiationQuotationRevision[];
+}
+
+/**
+ * Deterministic Negotiation Execution Types (V1)
+ */
+export interface ExecuteNegotiationIntentInput {
+    sourceRevisionId: string;
+    sourceRevisionNumber: number;
+    changes: NegotiationChange[];
+}
+
+export interface NegotiationExecutionChangeItem {
+    lineNumber: number;
+    name: string;
+    changeType: string;
+    before: {
+        quantity: number;
+        discountPercent: number;
+        lineTotal: number;
+    };
+    after: {
+        quantity: number;
+        discountPercent: number;
+        lineTotal: number;
+    };
+}
+
+export interface NegotiationExecutionCommercialSummary {
+    status: EvaluationStatus;
+    approvalLevel: DiscountApprovalLevel;
+    effectiveLimit: number | null;
+}
+
+export interface NegotiationExecutionApprovalSummary {
+    required: boolean;
+    requestId: string | null;
+    level: DiscountApprovalLevel | null;
+}
+
+export interface NegotiationExecutionResult {
+    quotation: {
+        id: string;
+        quoteNumber: string;
+        status: QuotationStatus;
+    };
+    revision: {
+        id: string;
+        revisionNumber: number;
+        status: QuotationRevisionStatus;
+    };
+    negotiation: {
+        id: string;
+        status: NegotiationStatus;
+    };
+    changes: NegotiationExecutionChangeItem[];
+    commercial: NegotiationExecutionCommercialSummary;
+    approval: NegotiationExecutionApprovalSummary;
 }

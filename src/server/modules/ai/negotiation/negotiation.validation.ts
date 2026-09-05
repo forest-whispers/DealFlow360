@@ -210,3 +210,32 @@ export const negotiationInterpretationJsonSchema: Record<string, unknown> = {
     },
     required: ["status"],
 };
+
+/**
+ * Request body schema for deterministic negotiation execution endpoint.
+ */
+export const executeNegotiationIntentInputSchema = z
+    .object({
+        sourceRevisionId: z
+            .string({
+                message: "sourceRevisionId is required.",
+            })
+            .trim()
+            .min(1, "sourceRevisionId must not be empty."),
+        sourceRevisionNumber: z
+            .number({
+                message: "sourceRevisionNumber is required.",
+            })
+            .int("sourceRevisionNumber must be an integer.")
+            .min(1, "sourceRevisionNumber must be >= 1."),
+        changes: z
+            .array(negotiationChangeSchema, {
+                message: "changes must be an array.",
+            })
+            .min(1, "At least one change is required to execute negotiation."),
+    })
+    .strict();
+
+export type ExecuteNegotiationIntentInputDto = z.infer<
+    typeof executeNegotiationIntentInputSchema
+>;
