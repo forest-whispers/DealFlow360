@@ -7,7 +7,9 @@ const envSchema = z.object({
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
-
+    NEXT_PUBLIC_API_URL: z
+      .string()
+      .default("http://localhost:3000/api"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
