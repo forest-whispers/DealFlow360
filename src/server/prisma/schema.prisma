@@ -27,15 +27,69 @@ enum CustomerTier {
   GOLD
 }
 
+enum BillingType {
+  ONE_TIME
+  RECURRING
+}
+
 model Organization {
   id   String @id @default(cuid())
   name String
   slug String @unique
 
-  users User[]
+  users    User[]
+  products Product[]
+  variants ProductVariant[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  category    String
+  isActive    Boolean     @default(true)
+  basePrice   Decimal     @db.Decimal(12, 2)
+  costPrice   Decimal     @db.Decimal(12, 2)
+  billingType BillingType @default(ONE_TIME)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  variants ProductVariant[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+  @@index([organizationId, category])
+  @@index([organizationId, billingType])
+}
+
+model ProductVariant {
+  id         String  @id @default(cuid())
+  productId  String
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku        String
+  name       String
+  price      Decimal @db.Decimal(12, 2)
+  cost       Decimal @db.Decimal(12, 2)
+  isActive   Boolean @default(true)
+  attributes Json?
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, sku])
+  @@index([productId])
+  @@index([organizationId])
+  @@index([organizationId, isActive])
 }
 
 model User {
