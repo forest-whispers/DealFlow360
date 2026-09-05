@@ -41,8 +41,34 @@ model Organization {
   products Product[]
   variants ProductVariant[]
 
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  discountTierRules      DiscountTierRule[]
+  discountCategoryRules  DiscountCategoryRule[]
+  discountApprovalPolicy DiscountApprovalPolicy?
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         UserRole @default(SALES_REP)
+  isActive     Boolean  @default(true)
+
+  // Customer-specific
+  customerTier    CustomerTier?
+  customerProfile Json?
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, role])
+  @@index([organizationId, role, customerTier])
 }
 
 model Product {
@@ -92,25 +118,46 @@ model ProductVariant {
   @@index([organizationId, isActive])
 }
 
-model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  name         String
-  role         UserRole @default(SALES_REP)
-  isActive     Boolean  @default(true)
-
-  // Customer-specific
-  customerTier    CustomerTier?
-  customerProfile Json?
+model DiscountTierRule {
+  id                     String       @id @default(cuid())
+  customerTier           CustomerTier
+  maximumDiscountPercent Decimal      @db.Decimal(5, 2)
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
+  isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([organizationId])
-  @@index([organizationId, role])
-  @@index([organizationId, role, customerTier])
+  @@unique([organizationId, customerTier])
+  @@index([organizationId, isActive])
+}
+
+model DiscountCategoryRule {
+  id                     String  @id @default(cuid())
+  category               String
+  maximumDiscountPercent Decimal @db.Decimal(5, 2)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, category])
+  @@index([organizationId, isActive])
+}
+
+model DiscountApprovalPolicy {
+  id String @id @default(cuid())
+
+  salesManagerThreshold      Decimal @db.Decimal(5, 2)
+  financeOperationsThreshold Decimal @db.Decimal(5, 2)
+
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  updatedAt DateTime @updatedAt
 }

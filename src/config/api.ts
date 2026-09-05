@@ -40,4 +40,23 @@ export const API_ROUTES = {
                 `${API_BASE_URL}/products/${productId}/variants/${variantId}/status`,
         },
     },
+
+    DISCOUNT_GOVERNANCE: {
+        EVALUATE_LINE: `${API_BASE_URL}/discount-governance/evaluate-line`,
+        APPROVAL_POLICY: `${API_BASE_URL}/discount-governance/approval-policy`,
+
+        TIER_RULES: {
+            LIST: `${API_BASE_URL}/discount-governance/tier-rules`,
+            CREATE: `${API_BASE_URL}/discount-governance/tier-rules`,
+            BY_ID: (id: string) =>
+                `${API_BASE_URL}/discount-governance/tier-rules/${id}`,
+        },
+
+        CATEGORY_RULES: {
+            LIST: `${API_BASE_URL}/discount-governance/category-rules`,
+            CREATE: `${API_BASE_URL}/discount-governance/category-rules`,
+            BY_ID: (id: string) =>
+                `${API_BASE_URL}/discount-governance/category-rules/${id}`,
+        },
+    },
 } as const;
