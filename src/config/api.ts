@@ -75,6 +75,10 @@ export const API_ROUTES = {
             `${API_BASE_URL}/quotations/${id}/approvals`,
         SEND: (id: string) =>
             `${API_BASE_URL}/quotations/${id}/send`,
+        DEAL_HEALTH: (id: string) =>
+            `${API_BASE_URL}/quotations/${id}/deal-health`,
+        DEAL_CONTEXT: (id: string) =>
+            `${API_BASE_URL}/quotations/${id}/deal-context`,
     },
 
     APPROVALS: {
