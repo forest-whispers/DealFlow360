@@ -19,6 +19,7 @@ import {
     NegotiationChangeType,
     NegotiationInterpretationResult,
     NegotiationInterpretationStatus,
+    ResolvedNegotiationQuotation,
 } from "./negotiation.types";
 import {
     InterpretNegotiationMessageInput,
@@ -32,28 +33,20 @@ import {
 
 export interface NegotiationInterpreterOptions {
     mockMode?: string;
+    preloadedQuotation?: ResolvedNegotiationQuotation;
 }
 
 export class NegotiationInterpreterService {
     constructor(private readonly ai: AIService = aiService) {}
 
     /**
-     * Interprets a customer's natural-language negotiation message into structured commercial intent.
-     *
-     * Dual authorization:
-     * - CUSTOMER: strictly restricted to their own quotation (customerId === user.id) in their organization.
-     * - Internal roles (SALES_REP, SALES_MANAGER, FINANCE_OPERATIONS, ADMIN): quotations in their organization.
-     * - Unauthorized or cross-org access throws NotFoundError ("Quotation not found.") preserving anti-enumeration.
-     *
-     * Completely read-only: performs zero domain state mutations.
+     * Resolves the authoritative quotation and its latest revision with strict dual authorization.
+     * Shared single source of truth for interpretation and deterministic preview.
      */
-    async interpretMessage(
+    async resolveNegotiationQuotation(
         user: AuthenticatedUser,
-        quotationId: string,
-        input: InterpretNegotiationMessageInput,
-        options?: NegotiationInterpreterOptions
-    ): Promise<NegotiationInterpretationResult> {
-        // 1. Resolve quotation and latest revision with strict dual authorization in database query
+        quotationId: string
+    ): Promise<ResolvedNegotiationQuotation> {
         const quotationWhere: {
             id: string;
             organizationId: string;
@@ -73,20 +66,34 @@ export class NegotiationInterpreterService {
                 id: true,
                 quoteNumber: true,
                 status: true,
+                customer: {
+                    select: {
+                        id: true,
+                        name: true,
+                        customerTier: true,
+                    },
+                },
                 revisions: {
                     orderBy: { revisionNumber: "desc" },
                     take: 1,
                     select: {
+                        id: true,
                         revisionNumber: true,
+                        status: true,
+                        orderDiscountPercent: true,
                         lines: {
                             orderBy: { lineNumber: "asc" },
                             select: {
+                                id: true,
                                 lineNumber: true,
+                                productId: true,
+                                variantId: true,
                                 name: true,
                                 sku: true,
                                 category: true,
                                 quantity: true,
                                 unitPrice: true,
+                                unitCost: true,
                                 discountPercent: true,
                             },
                         },
@@ -98,6 +105,34 @@ export class NegotiationInterpreterService {
         if (!quotation) {
             throw new NotFoundError("Quotation not found.");
         }
+
+        if (quotation.revisions.length === 0) {
+            throw new BadRequestError("Quotation has no revisions.");
+        }
+
+        return quotation;
+    }
+
+    /**
+     * Interprets a customer's natural-language negotiation message into structured commercial intent.
+     *
+     * Dual authorization:
+     * - CUSTOMER: strictly restricted to their own quotation (customerId === user.id) in their organization.
+     * - Internal roles (SALES_REP, SALES_MANAGER, FINANCE_OPERATIONS, ADMIN): quotations in their organization.
+     * - Unauthorized or cross-org access throws NotFoundError ("Quotation not found.") preserving anti-enumeration.
+     *
+     * Completely read-only: performs zero domain state mutations.
+     */
+    async interpretMessage(
+        user: AuthenticatedUser,
+        quotationId: string,
+        input: InterpretNegotiationMessageInput,
+        options?: NegotiationInterpreterOptions
+    ): Promise<NegotiationInterpretationResult> {
+        // 1. Resolve quotation and latest revision with strict dual authorization (single DB query or reused preloaded snapshot)
+        const quotation =
+            options?.preloadedQuotation ??
+            (await this.resolveNegotiationQuotation(user, quotationId));
 
         const latestRevision = quotation.revisions[0];
         if (!latestRevision) {
@@ -389,6 +424,81 @@ function createMockAIService(
                                 {
                                     type: "INVALID_CHANGE_TYPE",
                                     lineNumber: 1,
+                                },
+                            ],
+                        },
+                    } as T;
+
+                case "preview-discount-sm":
+                    return {
+                        status: NegotiationInterpretationStatus.INTERPRETED,
+                        intent: {
+                            changes: [
+                                {
+                                    type: NegotiationChangeType.LINE_DISCOUNT,
+                                    lineNumber: 1,
+                                    discountPercent: 15,
+                                },
+                            ],
+                        },
+                    } as T;
+
+                case "preview-discount-finance":
+                    return {
+                        status: NegotiationInterpretationStatus.INTERPRETED,
+                        intent: {
+                            changes: [
+                                {
+                                    type: NegotiationChangeType.LINE_DISCOUNT,
+                                    lineNumber: 1,
+                                    discountPercent: 25,
+                                },
+                            ],
+                        },
+                    } as T;
+
+                case "preview-discount-rejected":
+                    return {
+                        status: NegotiationInterpretationStatus.INTERPRETED,
+                        intent: {
+                            changes: [
+                                {
+                                    type: NegotiationChangeType.LINE_DISCOUNT,
+                                    lineNumber: 1,
+                                    discountPercent: 45,
+                                },
+                            ],
+                        },
+                    } as T;
+
+                case "preview-within-limit":
+                    return {
+                        status: NegotiationInterpretationStatus.INTERPRETED,
+                        intent: {
+                            changes: [
+                                {
+                                    type: NegotiationChangeType.LINE_DISCOUNT,
+                                    lineNumber: 1,
+                                    discountPercent: 5,
+                                },
+                            ],
+                        },
+                    } as T;
+
+                case "preview-multi-line":
+                    return {
+                        status: NegotiationInterpretationStatus.INTERPRETED,
+                        intent: {
+                            changes: [
+                                {
+                                    type: NegotiationChangeType.LINE_DISCOUNT,
+                                    lineNumber: 1,
+                                    discountPercent: 12,
+                                },
+                                {
+                                    type: NegotiationChangeType.LINE_QUANTITY,
+                                    lineNumber: 2,
+                                    quantity: 10,
                                 },
                             ],
                         },

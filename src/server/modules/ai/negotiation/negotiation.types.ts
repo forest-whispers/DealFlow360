@@ -1,10 +1,17 @@
 /**
- * Negotiation Interpretation Types (V1)
+ * Negotiation Interpretation & Deterministic Preview Types (V1)
  *
  * Types for interpreting natural-language customer negotiation messages
- * into structured, strongly-typed commercial intents.
+ * into structured, strongly-typed commercial intents and deterministic commercial previews.
  * Completely read-only: no domain mutations or database persistence.
  */
+
+import {
+    DiscountApprovalLevel,
+    EvaluationStatus,
+} from "@/server/modules/discount-governance/discount-governance.constants";
+import type { CustomerTier, QuotationRevisionStatus, QuotationStatus } from "@prisma/client";
+import type { Decimal } from "@prisma/client/runtime/library";
 
 export const NegotiationInterpretationStatus = {
     INTERPRETED: "INTERPRETED",
@@ -68,4 +75,85 @@ export interface AINegotiationContext {
     quotation: AINegotiationQuotationContext;
     lines: AINegotiationLineContext[];
     customerMessage: string;
+}
+
+/**
+ * Deterministic Commercial Preview Types
+ */
+export interface NegotiationGovernanceSummary {
+    status: EvaluationStatus;
+    approvalLevel: DiscountApprovalLevel;
+    message: string | null;
+}
+
+export interface NegotiationCommercialSummary {
+    subtotal: number;
+    lineDiscountTotal: number;
+    orderDiscount: number;
+    total: number;
+    margin: number;
+    marginPercent: number;
+    blendedDiscountPercent: number;
+    governance: NegotiationGovernanceSummary;
+}
+
+export interface NegotiationLineCommercialState {
+    quantity: number;
+    unitPrice: number;
+    discountPercent: number;
+    lineTotal: number;
+}
+
+export interface NegotiationLineChangePreview {
+    lineNumber: number;
+    productName: string;
+    sku: string | null;
+    before: NegotiationLineCommercialState;
+    after: NegotiationLineCommercialState;
+}
+
+export interface NegotiationPreviewResult {
+    status: NegotiationInterpretationStatus;
+    intent: NegotiationIntent | null;
+    commercial: NegotiationCommercialSummary | null;
+    changes: NegotiationLineChangePreview[];
+    before: NegotiationCommercialSummary | null;
+    after: NegotiationCommercialSummary | null;
+}
+
+/**
+ * Authoritative loaded quotation snapshot for negotiation interpretation & deterministic preview.
+ */
+export interface ResolvedNegotiationQuotationLine {
+    id: string;
+    lineNumber: number;
+    productId: string;
+    variantId: string | null;
+    name: string;
+    sku: string | null;
+    category: string;
+    quantity: number;
+    unitPrice: Decimal;
+    unitCost: Decimal;
+    discountPercent: Decimal;
+}
+
+export interface ResolvedNegotiationQuotationRevision {
+    id: string;
+    revisionNumber: number;
+    status: QuotationRevisionStatus;
+    orderDiscountPercent: Decimal;
+    lines: ResolvedNegotiationQuotationLine[];
+}
+
+export interface ResolvedNegotiationQuotation {
+    id: string;
+    quoteNumber: string;
+    status: QuotationStatus;
+    customer: {
+        id: string;
+        name: string;
+        customerTier: CustomerTier | null;
+    } | null;
+    revisions: ResolvedNegotiationQuotationRevision[];
 }
