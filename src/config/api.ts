@@ -18,6 +18,13 @@ export const API_ROUTES = {
         ME: `${API_BASE_URL}/auth/me`,
     },
 
+    USERS: {
+        LIST: `${API_BASE_URL}/users`,
+        BY_ID: (id: string) => `${API_BASE_URL}/users/${id}`,
+        UPDATE_ROLE: (id: string) => `${API_BASE_URL}/users/${id}/role`,
+        UPDATE_STATUS: (id: string) => `${API_BASE_URL}/users/${id}/status`,
+    },
+
     CUSTOMERS: {
         LIST: `${API_BASE_URL}/customers`,
         CREATE: `${API_BASE_URL}/customers`,
