@@ -69,6 +69,23 @@ enum ApprovalStepStatus {
   REJECTED
 }
 
+enum NegotiationStatus {
+  ACTIVE
+  RESOLVED
+}
+
+enum NegotiationMessageAuthorType {
+  CUSTOMER
+  SALES_REP
+}
+
+enum ChangeRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
 model Organization {
   id   String @id @default(cuid())
   name String
@@ -101,6 +118,10 @@ model User {
   customerQuotations Quotation[] @relation("CustomerQuotations")
 
   approvalDecisions ApprovalStep[] @relation("ApprovalDecisions")
+
+  negotiationMessages NegotiationMessage[] @relation("NegotiationMessageAuthors")
+
+  changeRequests ChangeRequest[] @relation("ChangeRequestAuthors")
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -293,6 +314,8 @@ model Quotation {
 
   approvalRequests ApprovalRequest[]
 
+  negotiations Negotiation[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -344,4 +367,69 @@ model ApprovalRequest {
   @@index([quotationId])
   @@index([revisionId])
   @@index([status])
+}
+
+model NegotiationMessage {
+  id String @id @default(cuid())
+
+  negotiationId String
+  negotiation   Negotiation @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
+
+  authorId String
+  author   User   @relation("NegotiationMessageAuthors", fields: [authorId], references: [id], onDelete: Restrict)
+
+  authorType NegotiationMessageAuthorType
+
+  message String
+
+  createdAt DateTime @default(now())
+
+  @@index([negotiationId, createdAt])
+  @@index([authorId])
+}
+
+model ChangeRequest {
+  id String @id @default(cuid())
+
+  negotiationId String
+  negotiation   Negotiation @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
+
+  requestedById String
+  requestedBy   User   @relation("ChangeRequestAuthors", fields: [requestedById], references: [id], onDelete: Restrict)
+
+  lineNumber Int?
+
+  quantity        Int?
+  discountPercent Decimal? @db.Decimal(5, 2)
+
+  orderDiscountPercent Decimal? @db.Decimal(5, 2)
+
+  message String?
+
+  status ChangeRequestStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([negotiationId])
+  @@index([negotiationId, status])
+  @@index([requestedById])
+}
+
+model Negotiation {
+  id String @id @default(cuid())
+
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+
+  status NegotiationStatus @default(ACTIVE)
+
+  messages       NegotiationMessage[]
+  changeRequests ChangeRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([quotationId])
+  @@index([quotationId, status])
 }

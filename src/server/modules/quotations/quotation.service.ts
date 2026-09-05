@@ -1260,6 +1260,66 @@ export class QuotationService {
 
         return response;
     }
+
+    // ==========================================
+    // 9. Send Quotation (APPROVED -> SENT)
+    // ==========================================
+    async sendQuotation(
+        user: AuthenticatedUser,
+        quotationId: string,
+    ): Promise<CanonicalQuotationResponse> {
+        const quotation = await prisma.quotation.findFirst({
+            where: { id: quotationId, organizationId: user.organizationId },
+            include: {
+                revisions: {
+                    orderBy: { revisionNumber: "desc" },
+                    take: 1,
+                    include: {
+                        approvalRequests: {
+                            where: { status: ApprovalRequestStatus.PENDING },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (!quotation) {
+            throw new NotFoundError("Quotation not found.");
+        }
+
+        const latestRevision = quotation.revisions[0];
+        if (!latestRevision) {
+            throw new NotFoundError("Quotation revision not found.");
+        }
+
+        if (
+            quotation.status !== QuotationStatus.APPROVED ||
+            latestRevision.status !== QuotationRevisionStatus.APPROVED
+        ) {
+            throw new BadRequestError(
+                "Only APPROVED quotations can be sent to the customer.",
+            );
+        }
+
+        if (latestRevision.approvalRequests.length > 0) {
+            throw new BadRequestError(
+                "Cannot send a quotation with pending approval requests.",
+            );
+        }
+
+        await prisma.$transaction([
+            prisma.quotationRevision.update({
+                where: { id: latestRevision.id },
+                data: { status: QuotationRevisionStatus.SENT },
+            }),
+            prisma.quotation.update({
+                where: { id: quotation.id },
+                data: { status: QuotationStatus.SENT },
+            }),
+        ]);
+
+        return this.getQuotationById(user, quotation.id);
+    }
 }
 
 export const quotationService = new QuotationService();

@@ -73,10 +73,27 @@ export const API_ROUTES = {
             `${API_BASE_URL}/quotations/${id}/lines/${lineNumber}`,
         APPROVALS: (id: string) =>
             `${API_BASE_URL}/quotations/${id}/approvals`,
+        SEND: (id: string) =>
+            `${API_BASE_URL}/quotations/${id}/send`,
     },
 
     APPROVALS: {
         APPROVE: (id: string) => `${API_BASE_URL}/approvals/${id}/approve`,
         REJECT: (id: string) => `${API_BASE_URL}/approvals/${id}/reject`,
+    },
+
+    PORTAL: {
+        QUOTATIONS: {
+            LIST: `${API_BASE_URL}/portal/quotations`,
+            BY_ID: (id: string) => `${API_BASE_URL}/portal/quotations/${id}`,
+            MESSAGES: (id: string) =>
+                `${API_BASE_URL}/portal/quotations/${id}/messages`,
+            CHANGE_REQUESTS: (id: string) =>
+                `${API_BASE_URL}/portal/quotations/${id}/change-requests`,
+            CONFIRM: (id: string) =>
+                `${API_BASE_URL}/portal/quotations/${id}/confirm`,
+            NEGOTIATION: (id: string) =>
+                `${API_BASE_URL}/portal/quotations/${id}/negotiation`,
+        },
     },
 } as const;
