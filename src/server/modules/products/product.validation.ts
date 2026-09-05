@@ -53,6 +53,12 @@ export const productVariantParamsSchema = z.object({
         .min(1, "Variant ID is required."),
 });
 
+import { BillingInterval } from "@prisma/client";
+
+export const billingIntervalSchema = z.nativeEnum(BillingInterval, {
+    message: "Invalid billing interval. Must be MONTHLY, QUARTERLY, or YEARLY.",
+});
+
 export const listProductsSchema = z.object({
     page: z
         .coerce
@@ -82,6 +88,8 @@ export const listProductsSchema = z.object({
         .optional(),
 
     billingType: billingTypeSchema.optional(),
+
+    billingInterval: billingIntervalSchema.optional(),
 
     isActive: z
         .union([
@@ -120,9 +128,27 @@ export const createProductSchema = z
 
         billingType: billingTypeSchema.optional().default("ONE_TIME"),
 
+        billingInterval: billingIntervalSchema.nullable().optional(),
+
         isActive: z.boolean().optional().default(true),
     })
-    .strict();
+    .strict()
+    .refine(
+        (data) => {
+            if (data.billingType === "RECURRING") {
+                return !!data.billingInterval;
+            }
+            if (data.billingType === "ONE_TIME") {
+                return !data.billingInterval;
+            }
+            return true;
+        },
+        {
+            message:
+                "Billing interval is required for RECURRING products and must be omitted for ONE_TIME products.",
+            path: ["billingInterval"],
+        },
+    );
 
 export const updateProductSchema = z
     .object({
@@ -153,6 +179,8 @@ export const updateProductSchema = z
 
         billingType: billingTypeSchema.optional(),
 
+        billingInterval: billingIntervalSchema.nullable().optional(),
+
         isActive: z.boolean().optional(),
     })
     .strict()
@@ -160,6 +188,22 @@ export const updateProductSchema = z
         (data) => Object.keys(data).length > 0,
         {
             message: "At least one field must be provided for update.",
+        },
+    )
+    .refine(
+        (data) => {
+            if (data.billingType === "RECURRING" && data.billingInterval === null) {
+                return false;
+            }
+            if (data.billingType === "ONE_TIME" && data.billingInterval) {
+                return false;
+            }
+            return true;
+        },
+        {
+            message:
+                "Billing interval is required for RECURRING products and must be omitted for ONE_TIME products.",
+            path: ["billingInterval"],
         },
     );
 

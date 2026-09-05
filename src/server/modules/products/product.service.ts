@@ -2,6 +2,7 @@ import { BillingType, Prisma, Product, ProductVariant } from "@prisma/client";
 
 import { prisma } from "@/server/shared/db/prisma";
 import {
+    BadRequestError,
     ConflictError,
     NotFoundError,
 } from "@/server/shared/errors/errors";
@@ -39,6 +40,7 @@ export function mapProductToResponse(record: ProductWithCount): ProductResponse 
         basePrice: record.basePrice.toNumber(),
         costPrice: record.costPrice.toNumber(),
         billingType: record.billingType,
+        billingInterval: record.billingInterval ?? null,
         createdAt: record.createdAt.toISOString(),
         updatedAt: record.updatedAt.toISOString(),
     };
@@ -86,6 +88,7 @@ export class ProductService {
             organizationId: user.organizationId,
             ...(category ? { category } : {}),
             ...(billingType ? { billingType } : {}),
+            ...(query.billingInterval ? { billingInterval: query.billingInterval } : {}),
             ...(isActive !== undefined ? { isActive } : {}),
             ...(search
                 ? {
@@ -159,6 +162,18 @@ export class ProductService {
         user: AuthenticatedUser,
         input: CreateProductInput,
     ): Promise<ProductResponse> {
+        const billingType = input.billingType ?? BillingType.ONE_TIME;
+        let billingInterval = input.billingInterval ?? null;
+
+        if (billingType === BillingType.RECURRING && !billingInterval) {
+            throw new BadRequestError(
+                "Billing interval is required for RECURRING products.",
+            );
+        }
+        if (billingType === BillingType.ONE_TIME) {
+            billingInterval = null;
+        }
+
         const createdProduct = await prisma.product.create({
             data: {
                 name: input.name,
@@ -166,7 +181,8 @@ export class ProductService {
                 category: input.category,
                 basePrice: new Prisma.Decimal(input.basePrice),
                 costPrice: new Prisma.Decimal(input.costPrice),
-                billingType: input.billingType ?? BillingType.ONE_TIME,
+                billingType,
+                billingInterval,
                 isActive: input.isActive ?? true,
                 organizationId: user.organizationId,
             },
@@ -194,6 +210,8 @@ export class ProductService {
             },
             select: {
                 id: true,
+                billingType: true,
+                billingInterval: true,
             },
         });
 
@@ -218,11 +236,37 @@ export class ProductService {
         if (input.costPrice !== undefined) {
             updateData.costPrice = new Prisma.Decimal(input.costPrice);
         }
-        if (input.billingType !== undefined) {
-            updateData.billingType = input.billingType;
-        }
         if (input.isActive !== undefined) {
             updateData.isActive = input.isActive;
+        }
+
+        // Validate resulting billing combination
+        const effectiveBillingType =
+            input.billingType !== undefined
+                ? input.billingType
+                : existingProduct.billingType;
+        let effectiveBillingInterval =
+            input.billingInterval !== undefined
+                ? input.billingInterval
+                : existingProduct.billingInterval;
+
+        if (effectiveBillingType === BillingType.ONE_TIME) {
+            effectiveBillingInterval = null;
+        } else if (effectiveBillingType === BillingType.RECURRING) {
+            if (!effectiveBillingInterval) {
+                throw new BadRequestError(
+                    "Billing interval is required for RECURRING products.",
+                );
+            }
+        }
+
+        if (
+            input.billingType !== undefined ||
+            input.billingInterval !== undefined ||
+            effectiveBillingInterval !== existingProduct.billingInterval
+        ) {
+            updateData.billingType = effectiveBillingType;
+            updateData.billingInterval = effectiveBillingInterval;
         }
 
         const updatedProduct = await prisma.product.update({

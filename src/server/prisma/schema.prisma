@@ -106,6 +106,22 @@ enum FulfillmentLineStatus {
   FULFILLED
 }
 
+enum BillingInterval {
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+}
+
 model Organization {
   id   String @id @default(cuid())
   name String
@@ -117,6 +133,9 @@ model Organization {
   variants ProductVariant[]
 
   warehouses Warehouse[]
+
+  invoices      Invoice[]
+  subscriptions Subscription[]
 
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
@@ -146,6 +165,9 @@ model User {
   negotiationMessages NegotiationMessage[] @relation("NegotiationMessageAuthors")
 
   changeRequests ChangeRequest[] @relation("ChangeRequestAuthors")
+
+  customerInvoices      Invoice[]      @relation("CustomerInvoices")
+  customerSubscriptions Subscription[] @relation("CustomerSubscriptions")
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -178,6 +200,11 @@ model Product {
 
   quotationLines QuotationLine[]
 
+  billingInterval BillingInterval?
+
+  invoiceLines      InvoiceLine[]
+  subscriptionLines SubscriptionLine[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -202,6 +229,9 @@ model ProductVariant {
   fulfillmentLines FulfillmentLine[]
 
   quotationLines QuotationLine[]
+
+  invoiceLines      InvoiceLine[]
+  subscriptionLines SubscriptionLine[]
 
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -323,6 +353,9 @@ model QuotationRevision {
 
   fulfillments Fulfillment[]
 
+  invoices      Invoice[]
+  subscriptions Subscription[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -349,6 +382,9 @@ model Quotation {
   negotiations Negotiation[]
 
   fulfillments Fulfillment[]
+
+  invoices      Invoice[]
+  subscriptions Subscription[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -593,4 +629,165 @@ model Fulfillment {
   @@index([quotationId])
   @@index([revisionId])
   @@index([status])
+}
+
+model Invoice {
+  id String @id @default(cuid())
+
+  invoiceNumber String
+
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+
+  revisionId String
+  revision   QuotationRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+
+  customerId String
+  customer   User   @relation("CustomerInvoices", fields: [customerId], references: [id], onDelete: Restrict)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  status InvoiceStatus @default(PENDING)
+
+  subtotal Decimal @db.Decimal(12, 2)
+  total    Decimal @db.Decimal(12, 2)
+
+  dueDate DateTime?
+  paidAt  DateTime?
+
+  lines    InvoiceLine[]
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, invoiceNumber])
+  @@unique([quotationId, revisionId])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([quotationId])
+  @@index([revisionId])
+  @@index([customerId])
+}
+
+model InvoiceLine {
+  id String @id @default(cuid())
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  quotationLineNumber Int
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  name String
+  sku  String?
+
+  quantity Int
+
+  unitPrice       Decimal @db.Decimal(12, 2)
+  discountPercent Decimal @db.Decimal(5, 2)
+  lineTotal       Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([invoiceId, quotationLineNumber])
+  @@index([invoiceId])
+  @@index([productId])
+  @@index([variantId])
+}
+
+model Subscription {
+  id String @id @default(cuid())
+
+  subscriptionNumber String
+
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+
+  revisionId String
+  revision   QuotationRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+
+  customerId String
+  customer   User   @relation("CustomerSubscriptions", fields: [customerId], references: [id], onDelete: Restrict)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  status SubscriptionStatus @default(ACTIVE)
+
+  billingInterval BillingInterval
+  recurringAmount Decimal         @db.Decimal(12, 2)
+
+  startDate       DateTime
+  nextBillingDate DateTime
+
+  lines SubscriptionLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, subscriptionNumber])
+  @@unique([quotationId, revisionId, billingInterval])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([quotationId])
+  @@index([revisionId])
+  @@index([customerId])
+  @@index([organizationId, nextBillingDate])
+}
+
+model SubscriptionLine {
+  id String @id @default(cuid())
+
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  quotationLineNumber Int
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  name String
+  sku  String?
+
+  quantity Int
+
+  unitPrice       Decimal @db.Decimal(12, 2)
+  discountPercent Decimal @db.Decimal(5, 2)
+  lineTotal       Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([subscriptionId, quotationLineNumber])
+  @@index([subscriptionId])
+  @@index([productId])
+  @@index([variantId])
+}
+
+model Payment {
+  id String @id @default(cuid())
+
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  amount Decimal @db.Decimal(12, 2)
+
+  paidAt DateTime @default(now())
+
+  reference String? @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
 }

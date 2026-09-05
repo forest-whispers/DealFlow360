@@ -1,4 +1,4 @@
-import { BillingType } from "@prisma/client";
+import { BillingInterval, BillingType } from "@prisma/client";
 
 export interface PaginationMetadata {
     page: number;
@@ -16,6 +16,7 @@ export interface ProductResponse {
     basePrice: number;
     costPrice: number;
     billingType: BillingType;
+    billingInterval: BillingInterval | null;
     createdAt: string;
     updatedAt: string;
     variantsCount?: number;
@@ -79,6 +80,7 @@ export interface ListProductsQuery {
     search?: string;
     category?: string;
     billingType?: BillingType;
+    billingInterval?: BillingInterval;
     isActive?: boolean;
 }
 
@@ -89,6 +91,7 @@ export interface CreateProductInput {
     basePrice: number;
     costPrice: number;
     billingType?: BillingType;
+    billingInterval?: BillingInterval | null;
     isActive?: boolean;
 }
 
@@ -99,6 +102,7 @@ export interface UpdateProductInput {
     basePrice?: number;
     costPrice?: number;
     billingType?: BillingType;
+    billingInterval?: BillingInterval | null;
     isActive?: boolean;
 }
 

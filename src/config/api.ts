@@ -115,4 +115,19 @@ export const API_ROUTES = {
         CREATE: `${API_BASE_URL}/fulfillments`,
         BY_ID: (id: string) => `${API_BASE_URL}/fulfillments/${id}`,
     },
+
+    BILLING: {
+        GENERATE: `${API_BASE_URL}/billing`,
+    },
+
+    INVOICES: {
+        LIST: `${API_BASE_URL}/invoices`,
+        BY_ID: (id: string) => `${API_BASE_URL}/invoices/${id}`,
+        PAY: (id: string) => `${API_BASE_URL}/invoices/${id}/pay`,
+    },
+
+    SUBSCRIPTIONS: {
+        LIST: `${API_BASE_URL}/subscriptions`,
+        BY_ID: (id: string) => `${API_BASE_URL}/subscriptions/${id}`,
+    },
 } as const;
