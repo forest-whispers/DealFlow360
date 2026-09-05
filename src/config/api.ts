@@ -96,4 +96,23 @@ export const API_ROUTES = {
                 `${API_BASE_URL}/portal/quotations/${id}/negotiation`,
         },
     },
+
+    WAREHOUSES: {
+        LIST: `${API_BASE_URL}/warehouses`,
+        CREATE: `${API_BASE_URL}/warehouses`,
+        BY_ID: (id: string) => `${API_BASE_URL}/warehouses/${id}`,
+        STATUS: (id: string) => `${API_BASE_URL}/warehouses/${id}/status`,
+        INVENTORY: {
+            LIST: (id: string) => `${API_BASE_URL}/warehouses/${id}/inventory`,
+            CREATE: (id: string) => `${API_BASE_URL}/warehouses/${id}/inventory`,
+            UPDATE_QTY: (id: string, inventoryId: string) =>
+                `${API_BASE_URL}/warehouses/${id}/inventory/${inventoryId}`,
+        },
+    },
+
+    FULFILLMENTS: {
+        LIST: `${API_BASE_URL}/fulfillments`,
+        CREATE: `${API_BASE_URL}/fulfillments`,
+        BY_ID: (id: string) => `${API_BASE_URL}/fulfillments/${id}`,
+    },
 } as const;
