@@ -19,6 +19,7 @@ import {
     Prisma,
     QuotationRevisionStatus,
     QuotationStatus,
+    UserRole,
 } from "@prisma/client";
 import {
     calculateLineCommercials,
@@ -39,6 +40,7 @@ import type { AuthenticatedUser } from "@/server/modules/auth/auth.types";
 import {
     BadRequestError,
     ConflictError,
+    ForbiddenError,
     NotFoundError,
     ValidationError,
 } from "@/server/shared/errors/errors";
@@ -74,11 +76,10 @@ export class NegotiationExecutionService {
                     throw new NotFoundError("Quotation not found.");
                 }
 
-                if (
-                    user.role === "CUSTOMER" &&
-                    lockedRows[0].customerId !== user.id
-                ) {
-                    throw new NotFoundError("Quotation not found.");
+                if (user.role === UserRole.CUSTOMER) {
+                    throw new ForbiddenError(
+                        "Customers cannot authoritatively execute quotation revisions. Commercial proposals must be submitted via change requests.",
+                    );
                 }
 
                 // 2. Fetch authoritative quotation with customer and latest revision
@@ -86,9 +87,6 @@ export class NegotiationExecutionService {
                     where: {
                         id: quotationId,
                         organizationId: user.organizationId,
-                        ...(user.role === "CUSTOMER"
-                            ? { customerId: user.id }
-                            : {}),
                     },
                     include: {
                         customer: {
@@ -446,24 +444,17 @@ export class NegotiationExecutionService {
                     });
                 }
 
-                // 13. Persist consolidated ChangeRequest records per modified line
-                for (const [lineNumber, ch] of lineChangesMap.entries()) {
-                    await tx.changeRequest.create({
-                        data: {
-                            negotiationId: negotiation.id,
-                            requestedById: user.id,
-                            lineNumber,
-                            quantity: ch.quantity ?? null,
-                            discountPercent:
-                                ch.discountPercent !== undefined
-                                    ? new Prisma.Decimal(ch.discountPercent)
-                                    : null,
-                            orderDiscountPercent: null,
-                            message: "AI-negotiated commercial proposal",
-                            status: ChangeRequestStatus.PENDING,
-                        },
-                    });
-                }
+                // 13. Mark existing pending customer change requests as ACCEPTED
+                // since sales is authoritatively executing revised terms into Revision N+1
+                await tx.changeRequest.updateMany({
+                    where: {
+                        negotiationId: negotiation.id,
+                        status: ChangeRequestStatus.PENDING,
+                    },
+                    data: {
+                        status: ChangeRequestStatus.ACCEPTED,
+                    },
+                });
 
                 // 14. Persist ApprovalRequest and sequenced steps if required
                 let createdApprovalRequest: { id: string } | null = null;

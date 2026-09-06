@@ -86,6 +86,10 @@ export const API_ROUTES = {
             `${API_BASE_URL}/quotations/${id}/deal-health`,
         DEAL_CONTEXT: (id: string) =>
             `${API_BASE_URL}/quotations/${id}/deal-context`,
+        NEGOTIATION: (id: string) =>
+            `${API_BASE_URL}/quotations/${id}/negotiation`,
+        CHANGE_REQUEST_REJECT: (id: string, requestId: string) =>
+            `${API_BASE_URL}/quotations/${id}/change-requests/${requestId}/reject`,
         AI_NEGOTIATION_PREVIEW: (id: string) =>
             `${API_BASE_URL}/quotations/${id}/ai/negotiation/preview`,
         AI_NEGOTIATION_EXECUTE: (id: string) =>

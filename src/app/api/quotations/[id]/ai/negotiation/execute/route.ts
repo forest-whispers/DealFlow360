@@ -9,12 +9,11 @@ import { executeNegotiationIntentInputSchema } from "@/server/modules/ai/negotia
 import { negotiationExecutionService } from "@/server/modules/ai/negotiation/negotiation.execution.service";
 
 /**
- * Supported roles for deterministic negotiation execution:
- * - CUSTOMER: strictly allowed for their own quotation (enforced inside service).
- * - Internal roles: SALES_REP, SALES_MANAGER, FINANCE_OPERATIONS, ADMIN.
+ * Supported roles for authoritative negotiation revision execution:
+ * - Internal sales/finance roles: SALES_REP, SALES_MANAGER, FINANCE_OPERATIONS, ADMIN.
+ * Customers can only submit proposals via change requests, never authoritatively execute revisions.
  */
 const ALLOWED_NEGOTIATION_ROLES = [
-    UserRole.CUSTOMER,
     UserRole.SALES_REP,
     UserRole.SALES_MANAGER,
     UserRole.FINANCE_OPERATIONS,

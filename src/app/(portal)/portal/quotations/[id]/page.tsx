@@ -32,7 +32,6 @@ import type {
 } from "@/server/modules/negotiation/negotiation.types";
 import type {
     NegotiationChange,
-    NegotiationExecutionResult,
     NegotiationPreviewResult,
 } from "@/server/modules/ai/negotiation/negotiation.types";
 
@@ -174,40 +173,41 @@ export default function CustomerQuotationDetailPage({
         }
     };
 
-    // Handle executing the interpreted AI negotiation proposal
+    // Handle submitting the interpreted AI negotiation proposal as a ChangeRequest
     const handleExecuteAIChanges = async (changes: NegotiationChange[]) => {
         if (!quotation) return;
 
         setIsExecutingAI(true);
         try {
-            await apiClient.post<NegotiationExecutionResult>(
-                API_ROUTES.AI_NEGOTIATION.EXECUTE(id),
-                {
-                    sourceRevisionId: quotation.revision.id,
-                    sourceRevisionNumber: quotation.revision.revisionNumber,
-                    changes,
-                }
-            );
+            for (const ch of changes) {
+                await apiClient.post(
+                    API_ROUTES.PORTAL.QUOTATIONS.CHANGE_REQUESTS(id),
+                    {
+                        lineNumber: ch.lineNumber,
+                        quantity: ch.type === "LINE_QUANTITY" ? ch.quantity : undefined,
+                        discountPercent:
+                            ch.type === "LINE_DISCOUNT" ? ch.discountPercent : undefined,
+                        message: `Requested via proposal preview: ${
+                            ch.type === "LINE_DISCOUNT"
+                                ? `${ch.discountPercent}% discount`
+                                : `${ch.quantity} qty`
+                        } on Line ${ch.lineNumber}`,
+                    }
+                );
+            }
 
             toast.success(
-                "Proposal Submitted",
-                "Your proposed commercial adjustments have been recorded and sent to the sales team."
+                "Proposal Submitted for Review",
+                "Your proposed commercial adjustments have been submitted for sales review. Active quotation terms remain unchanged."
             );
             setPreviewResult(null);
             refreshData();
         } catch (err: unknown) {
-            if (err instanceof ApiClientError && err.statusCode === 409) {
-                // 409 Conflict: stale revision
-                toast.warning(
-                    "Quotation Updated",
-                    "The quotation terms were updated. Refreshing the latest revision."
-                );
-                setPreviewResult(null);
-                refreshData();
-            } else {
-                const msg = err instanceof ApiClientError ? err.message : "Failed to submit proposal.";
-                toast.error("Submission Failed", msg);
-            }
+            const msg =
+                err instanceof ApiClientError
+                    ? err.message
+                    : "Failed to submit proposal.";
+            toast.error("Submission Failed", msg);
         } finally {
             setIsExecutingAI(false);
         }
@@ -506,7 +506,20 @@ export default function CustomerQuotationDetailPage({
                         </div>
                     )}
 
-                    {isPendingApproval && (
+                    {quotation.status === "UNDER_NEGOTIATION" && (
+                        <div className="p-4 rounded-lg bg-[#FFFBEB] border border-[#FDE68A] space-y-2">
+                            <div className="flex items-center gap-2 text-[#D97706]">
+                                <Clock className="w-5 h-5 shrink-0" />
+                                <span className="font-bold text-[14px]">Negotiation In Progress</span>
+                            </div>
+                            <p className="text-[12px] text-[#92400E] leading-relaxed">
+                                A commercial proposal is currently under review with your account team.
+                                The quotation pricing and totals above reflect the currently active terms (Revision {quotation.revision.revisionNumber}). Active terms remain unchanged until new terms are approved and issued by sales.
+                            </p>
+                        </div>
+                    )}
+
+                    {isPendingApproval && quotation.status !== "UNDER_NEGOTIATION" && (
                         <div className="p-4 rounded-lg bg-[#FFFBEB] border border-[#FDE68A] space-y-2">
                             <div className="flex items-center gap-2 text-[#D97706]">
                                 <Clock className="w-5 h-5 shrink-0" />

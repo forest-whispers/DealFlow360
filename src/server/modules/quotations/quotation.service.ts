@@ -1316,12 +1316,16 @@ export class QuotationService {
             throw new NotFoundError("Quotation revision not found.");
         }
 
+        const isAllowedQuotationStatus =
+            quotation.status === QuotationStatus.APPROVED ||
+            quotation.status === QuotationStatus.UNDER_NEGOTIATION;
+
         if (
-            quotation.status !== QuotationStatus.APPROVED ||
+            !isAllowedQuotationStatus ||
             latestRevision.status !== QuotationRevisionStatus.APPROVED
         ) {
             throw new BadRequestError(
-                "Only APPROVED quotations can be sent to the customer.",
+                "Only quotations with an APPROVED latest revision can be sent to the customer.",
             );
         }
 

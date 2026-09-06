@@ -1,7 +1,5 @@
 import {
     ApprovalRequestStatus,
-    ApprovalStepLevel,
-    ApprovalStepStatus,
     ChangeRequestStatus,
     CustomerTier,
     NegotiationMessageAuthorType,
@@ -9,6 +7,7 @@ import {
     Prisma,
     QuotationRevisionStatus,
     QuotationStatus,
+    UserRole,
 } from "@prisma/client";
 import { prisma } from "@/server/shared/db/prisma";
 import {
@@ -18,7 +17,6 @@ import {
 import type { AuthenticatedUser } from "@/server/modules/auth/auth.types";
 import { evaluateLineDiscount } from "@/server/modules/discount-governance/discount-calculator";
 import {
-    DiscountApprovalLevel,
     EvaluationStatus,
 } from "@/server/modules/discount-governance/discount-governance.constants";
 import type {
@@ -475,8 +473,7 @@ export class NegotiationService {
                 },
             });
 
-            // Build proposed Revision N+1 without mutating activeRevision
-            const newRevisionNumber = activeRevision.revisionNumber + 1;
+            // Validate proposed commercial changes against governance without mutating activeRevision
             const newOrderDiscountPercent =
                 input.orderDiscountPercent ??
                 activeRevision.orderDiscountPercent.toNumber();
@@ -577,99 +574,18 @@ export class NegotiationService {
                 );
             }
 
-            // Determine statuses
-            let newRevisionStatus: QuotationRevisionStatus;
-            if (
-                quotationEvaluation.status === EvaluationStatus.APPROVAL_REQUIRED
-            ) {
-                newRevisionStatus = QuotationRevisionStatus.PENDING_APPROVAL;
-            } else {
-                newRevisionStatus = QuotationRevisionStatus.APPROVED;
-            }
-
-            // Persist new revision
-            const createdRevision = await tx.quotationRevision.create({
-                data: {
-                    quotationId: quotation.id,
-                    revisionNumber: newRevisionNumber,
-                    status: newRevisionStatus,
-                    orderDiscountPercent: new Prisma.Decimal(
-                        newOrderDiscountPercent,
-                    ),
-                    subtotal: new Prisma.Decimal(summary.subtotal),
-                    lineDiscountTotal: new Prisma.Decimal(
-                        summary.lineDiscountTotal,
-                    ),
-                    orderDiscount: new Prisma.Decimal(summary.orderDiscount),
-                    total: new Prisma.Decimal(summary.total),
-                    margin: new Prisma.Decimal(summary.margin),
-                    marginPercent: new Prisma.Decimal(summary.marginPercent),
-                    lines: {
-                        create: computedLines.map((line) => ({
-                            productId: line.productId,
-                            variantId: line.variantId,
-                            lineNumber: line.lineNumber,
-                            name: line.name,
-                            sku: line.sku,
-                            category: line.category,
-                            quantity: line.quantity,
-                            unitPrice: new Prisma.Decimal(line.unitPrice),
-                            unitCost: new Prisma.Decimal(line.unitCost),
-                            discountPercent: new Prisma.Decimal(
-                                line.discountPercent,
-                            ),
-                            lineSubtotal: new Prisma.Decimal(line.lineSubtotal),
-                            lineDiscount: new Prisma.Decimal(line.lineDiscount),
-                            lineTotal: new Prisma.Decimal(line.lineTotal),
-                            margin: new Prisma.Decimal(line.margin),
-                            marginPercent: new Prisma.Decimal(
-                                line.marginPercent,
-                            ),
-                        })),
-                    },
-                },
-            });
-
-            // If approval required, create ApprovalRequest + steps referencing NEW revision
-            if (
-                newRevisionStatus === QuotationRevisionStatus.PENDING_APPROVAL
-            ) {
-                const stepsData: Prisma.ApprovalStepCreateWithoutApprovalRequestInput[] = [
-                    {
-                        level: ApprovalStepLevel.SALES_MANAGER,
-                        status: ApprovalStepStatus.PENDING,
-                    },
-                ];
-
-                if (
-                    quotationEvaluation.approvalLevel ===
-                    DiscountApprovalLevel.FINANCE_OPERATIONS
-                ) {
-                    stepsData.push({
-                        level: ApprovalStepLevel.FINANCE_OPERATIONS,
-                        status: ApprovalStepStatus.PENDING,
-                    });
-                }
-
-                await tx.approvalRequest.create({
-                    data: {
-                        quotationId: quotation.id,
-                        revisionId: createdRevision.id,
-                        status: ApprovalRequestStatus.PENDING,
-                        steps: {
-                            create: stepsData,
-                        },
-                    },
+            // Invariant: Customer negotiation request is a proposal/intent only.
+            // It MUST NEVER create or mutate a QuotationRevision.
+            // The active revision, effective discount, totals, and commercial terms
+            // remain authoritative and unchanged until internal sales explicitly proposes/executes revised terms.
+            if (quotation.status !== QuotationStatus.UNDER_NEGOTIATION) {
+                await tx.quotation.update({
+                    where: { id: quotation.id },
+                    data: { status: QuotationStatus.UNDER_NEGOTIATION },
                 });
             }
 
-            // Transition quotation to UNDER_NEGOTIATION
-            await tx.quotation.update({
-                where: { id: quotation.id },
-                data: { status: QuotationStatus.UNDER_NEGOTIATION },
-            });
-
-            // Return customer-safe projection
+            // Return customer-safe projection of the authoritative ACTIVE revision (unchanged)
             return {
                 id: quotation.id,
                 quoteNumber: quotation.quoteNumber,
@@ -677,28 +593,30 @@ export class NegotiationService {
                 createdAt: quotation.createdAt.toISOString(),
                 updatedAt: new Date().toISOString(),
                 revision: {
-                    id: createdRevision.id,
-                    revisionNumber: createdRevision.revisionNumber,
-                    status: createdRevision.status,
-                    orderDiscountPercent: newOrderDiscountPercent,
+                    id: activeRevision.id,
+                    revisionNumber: activeRevision.revisionNumber,
+                    status: activeRevision.status,
+                    orderDiscountPercent:
+                        activeRevision.orderDiscountPercent.toNumber(),
                     summary: {
-                        subtotal: summary.subtotal,
-                        lineDiscountTotal: summary.lineDiscountTotal,
-                        orderDiscount: summary.orderDiscount,
-                        total: summary.total,
+                        subtotal: activeRevision.subtotal.toNumber(),
+                        lineDiscountTotal:
+                            activeRevision.lineDiscountTotal.toNumber(),
+                        orderDiscount: activeRevision.orderDiscount.toNumber(),
+                        total: activeRevision.total.toNumber(),
                     },
-                    lines: computedLines.map((line) => ({
+                    lines: activeRevision.lines.map((line) => ({
                         lineNumber: line.lineNumber,
                         productId: line.productId,
                         name: line.name,
                         sku: line.sku,
                         category: line.category,
                         quantity: line.quantity,
-                        unitPrice: line.unitPrice,
-                        discountPercent: line.discountPercent,
-                        lineSubtotal: line.lineSubtotal,
-                        lineDiscount: line.lineDiscount,
-                        lineTotal: line.lineTotal,
+                        unitPrice: line.unitPrice.toNumber(),
+                        discountPercent: line.discountPercent.toNumber(),
+                        lineSubtotal: line.lineSubtotal.toNumber(),
+                        lineDiscount: line.lineDiscount.toNumber(),
+                        lineTotal: line.lineTotal.toNumber(),
                     })),
                 },
             };
@@ -849,18 +767,23 @@ export class NegotiationService {
     }
 
     // ==========================================
-    // 6. Get Negotiation History (Portal)
+    // 6. Get Negotiation History (Portal & Internal Sales)
     // ==========================================
     async getNegotiationHistory(
         user: AuthenticatedUser,
         quotationId: string,
     ): Promise<PortalNegotiationHistoryResponse> {
+        const isCustomer = user.role === UserRole.CUSTOMER;
         const quotation = await prisma.quotation.findFirst({
             where: {
                 id: quotationId,
-                customerId: user.id,
                 organizationId: user.organizationId,
-                status: { in: PORTAL_VIEWABLE_QUOTATION_STATUSES },
+                ...(isCustomer
+                    ? {
+                          customerId: user.id,
+                          status: { in: PORTAL_VIEWABLE_QUOTATION_STATUSES },
+                      }
+                    : {}),
             },
             select: { id: true },
         });
@@ -926,6 +849,79 @@ export class NegotiationService {
             messages,
             changeRequests,
         };
+    }
+
+    // ==========================================
+    // 7. Decline Customer Change Request (Internal Sales)
+    // ==========================================
+    async declineChangeRequest(
+        user: AuthenticatedUser,
+        quotationId: string,
+        changeRequestId: string,
+        reason?: string,
+    ): Promise<PortalChangeRequestResponse> {
+        return prisma.$transaction(async (tx) => {
+            const quotation = await tx.quotation.findFirst({
+                where: {
+                    id: quotationId,
+                    organizationId: user.organizationId,
+                },
+            });
+
+            if (!quotation) {
+                throw new NotFoundError("Quotation not found.");
+            }
+
+            const changeRequest = await tx.changeRequest.findFirst({
+                where: {
+                    id: changeRequestId,
+                    negotiation: { quotationId: quotation.id },
+                },
+                include: {
+                    negotiation: true,
+                },
+            });
+
+            if (!changeRequest) {
+                throw new NotFoundError("Change request not found.");
+            }
+
+            if (changeRequest.status !== ChangeRequestStatus.PENDING) {
+                throw new BadRequestError(
+                    "Only pending change requests can be declined.",
+                );
+            }
+
+            const updated = await tx.changeRequest.update({
+                where: { id: changeRequestId },
+                data: {
+                    status: ChangeRequestStatus.REJECTED,
+                },
+            });
+
+            if (reason && reason.trim().length > 0) {
+                await tx.negotiationMessage.create({
+                    data: {
+                        negotiationId: changeRequest.negotiationId,
+                        authorId: user.id,
+                        authorType: NegotiationMessageAuthorType.SALES_REP,
+                        message: `Change request declined: ${reason.trim()}`,
+                    },
+                });
+            }
+
+            return {
+                id: updated.id,
+                lineNumber: updated.lineNumber,
+                quantity: updated.quantity,
+                discountPercent: updated.discountPercent?.toNumber() ?? null,
+                orderDiscountPercent:
+                    updated.orderDiscountPercent?.toNumber() ?? null,
+                message: updated.message,
+                status: updated.status,
+                createdAt: updated.createdAt.toISOString(),
+            };
+        });
     }
 }
 

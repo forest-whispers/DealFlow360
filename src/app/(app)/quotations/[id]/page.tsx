@@ -19,6 +19,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CustomerContextCard } from "@/components/quotations/customer-context-card";
+import { CustomerNegotiationCard } from "@/components/quotations/customer-negotiation-card";
 import { CommercialSummaryCard } from "@/components/quotations/commercial-summary-card";
 import { GovernancePanel } from "@/components/quotations/governance-panel";
 import { DealLifecycleBanner } from "@/components/quotations/deal-lifecycle-banner";
@@ -82,7 +83,9 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
     const [isAddLineModalOpen, setIsAddLineModalOpen] = useState<boolean>(false);
 
     const isDraft = quotation?.status === "DRAFT";
-    const isApproved = quotation?.status === "APPROVED";
+    const canSendQuotation =
+        (quotation?.status === "APPROVED" || quotation?.status === "UNDER_NEGOTIATION") &&
+        quotation?.revision?.status === "APPROVED";
     const canManageQuotation =
         currentUser && QUOTATION_MANAGE_ROLES.includes(currentUser.role);
 
@@ -354,7 +357,7 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
 
     // Domain Action: Send Quotation (POST /api/quotations/:id/send)
     const handleSendQuotation = async () => {
-        if (!isApproved) return;
+        if (!canSendQuotation) return;
 
         setIsSending(true);
 
@@ -514,7 +517,7 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
                         </>
                     )}
 
-                    {isApproved && canManageQuotation && (
+                    {canSendQuotation && canManageQuotation && (
                         <Button
                             variant="primary"
                             size="default"
@@ -554,6 +557,13 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left Column: Line Items Table */}
                 <div className="lg:col-span-2 space-y-4">
+                    {/* Customer Negotiation Request Panel */}
+                    <CustomerNegotiationCard
+                        quotation={quotation}
+                        canManage={Boolean(canManageQuotation)}
+                        onNegotiationUpdated={() => setRefreshTrigger((prev) => prev + 1)}
+                    />
+
                     <Card className="border-[#E2E8F0]">
                         <CardHeader className="pb-3 border-b border-[#F1F5F9] flex flex-row items-center justify-between">
                             <div>

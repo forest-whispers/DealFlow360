@@ -232,27 +232,33 @@ export function NegotiationPreviewCard({
                 )}
             </CardContent>
 
-            <CardFooter className="bg-white border-t border-[#E2E8F0] py-3 flex items-center justify-between">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={onDismiss}
-                    disabled={isExecuting}
-                >
-                    Cancel
-                </Button>
+            <CardFooter className="bg-white border-t border-[#E2E8F0] py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="text-[11px] text-[#64748B] flex items-center gap-1.5">
+                    <span className="font-semibold text-[#0F172A]">Note:</span> Submitting sends this proposal for sales review. Active quotation terms remain unchanged until approved by sales.
+                </div>
 
-                {isInterpreted && preview.intent && (
+                <div className="flex items-center gap-2 self-end sm:self-auto">
                     <Button
-                        variant="primary"
+                        variant="outline"
                         size="sm"
-                        isLoading={isExecuting}
-                        onClick={() => onExecute(preview.intent?.changes ?? [])}
-                        leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                        onClick={onDismiss}
+                        disabled={isExecuting}
                     >
-                        Apply & Submit Proposal
+                        Cancel
                     </Button>
-                )}
+
+                    {isInterpreted && preview.intent && (
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            isLoading={isExecuting}
+                            onClick={() => onExecute(preview.intent?.changes ?? [])}
+                            leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
+                        >
+                            Submit Proposal for Review
+                        </Button>
+                    )}
+                </div>
             </CardFooter>
         </Card>
     );
