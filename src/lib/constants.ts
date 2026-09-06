@@ -183,6 +183,10 @@ export const WAREHOUSE_READ_ROLES: ("ADMIN" | "SALES_MANAGER" | "SALES_REP" | "F
     "SALES_MANAGER",
     "SALES_REP",
 ];
+export const WAREHOUSE_MANAGE_ROLES: ("ADMIN" | "FINANCE_OPERATIONS")[] = [
+    "ADMIN",
+    "FINANCE_OPERATIONS",
+];
 
 export const APPROVAL_LEVEL_META: Record<string, { label: string; roles: string[] }> = {
     SALES_MANAGER: {

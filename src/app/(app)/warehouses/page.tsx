@@ -18,13 +18,16 @@ import { TableRowSkeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { RoleGate } from "@/components/shared/role-gate";
+import { CreateWarehouseModal } from "@/components/warehouses/create-warehouse-modal";
 import { apiClient } from "@/lib/api-client";
 import { API_ROUTES } from "@/config/api";
-import { WAREHOUSE_READ_ROLES } from "@/lib/constants";
+import { useAuth } from "@/context/auth-context";
+import { WAREHOUSE_READ_ROLES, WAREHOUSE_MANAGE_ROLES } from "@/lib/constants";
 import {
     Boxes,
     ChevronRight,
     Package,
+    Plus,
     RotateCw,
     Search,
     Warehouse as WarehouseIcon,
@@ -37,9 +40,13 @@ import type {
 } from "@/server/modules/warehouses/warehouse.types";
 
 export default function WarehousesPage() {
+    const { user: currentUser } = useAuth();
     const [warehouses, setWarehouses] = useState<WarehouseResponse[]>([]);
     const [isLoadingWarehouses, setIsLoadingWarehouses] = useState<boolean>(true);
     const [warehouseError, setWarehouseError] = useState<string | null>(null);
+
+    // Create Modal
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
 
     // Selected Warehouse for Inventory View
     const [selectedWarehouse, setSelectedWarehouse] = useState<WarehouseResponse | null>(null);
@@ -48,6 +55,11 @@ export default function WarehousesPage() {
     const [inventoryError, setInventoryError] = useState<string | null>(null);
     const [inventorySearch, setInventorySearch] = useState<string>("");
     const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+
+    const canManageWarehouses = Boolean(
+        currentUser &&
+            (WAREHOUSE_MANAGE_ROLES as readonly string[]).includes(currentUser.role)
+    );
 
     // Fetch Warehouses
     useEffect(() => {
@@ -156,15 +168,27 @@ export default function WarehousesPage() {
                         { label: "Warehouses" },
                     ]}
                     actions={
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            leftIcon={<RotateCw className="w-3.5 h-3.5" />}
-                            onClick={() => setRefreshTrigger((prev) => prev + 1)}
-                            isLoading={isLoadingWarehouses}
-                        >
-                            Refresh
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                leftIcon={<RotateCw className="w-3.5 h-3.5" />}
+                                onClick={() => setRefreshTrigger((prev) => prev + 1)}
+                                isLoading={isLoadingWarehouses}
+                            >
+                                Refresh
+                            </Button>
+                            {canManageWarehouses && (
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    leftIcon={<Plus className="w-4 h-4" />}
+                                    onClick={() => setIsCreateModalOpen(true)}
+                                >
+                                    Add Warehouse
+                                </Button>
+                            )}
+                        </div>
                     }
                 />
 
@@ -178,9 +202,11 @@ export default function WarehousesPage() {
                                     <WarehouseIcon className="w-4 h-4 text-[#1E40AF]" />
                                     Fulfillment Centers
                                 </CardTitle>
-                                <Badge variant="neutral" size="sm">
-                                    {warehouses.length} {warehouses.length === 1 ? "Facility" : "Facilities"}
-                                </Badge>
+                                <div className="flex items-center gap-2">
+                                    <Badge variant="neutral" size="sm">
+                                        {warehouses.length} {warehouses.length === 1 ? "Facility" : "Facilities"}
+                                    </Badge>
+                                </div>
                             </CardHeader>
 
                             <CardContent className="p-3">
@@ -199,8 +225,18 @@ export default function WarehousesPage() {
                                         />
                                     </div>
                                 ) : warehouses.length === 0 ? (
-                                    <div className="py-6 text-center text-[13px] text-[#64748B]">
-                                        No warehouses configured.
+                                    <div className="py-6 text-center text-[13px] text-[#64748B] space-y-3">
+                                        <p>No warehouses configured.</p>
+                                        {canManageWarehouses && (
+                                            <Button
+                                                variant="primary"
+                                                size="sm"
+                                                leftIcon={<Plus className="w-4 h-4" />}
+                                                onClick={() => setIsCreateModalOpen(true)}
+                                            >
+                                                Add First Warehouse
+                                            </Button>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
@@ -410,6 +446,16 @@ export default function WarehousesPage() {
                         </Card>
                     </div>
                 </div>
+
+                {/* Create Warehouse Modal */}
+                <CreateWarehouseModal
+                    isOpen={isCreateModalOpen}
+                    onClose={() => setIsCreateModalOpen(false)}
+                    onSuccess={(newWh) => {
+                        setRefreshTrigger((prev) => prev + 1);
+                        setSelectedWarehouse(newWh);
+                    }}
+                />
             </div>
         </RoleGate>
     );

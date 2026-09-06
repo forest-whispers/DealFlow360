@@ -3,7 +3,6 @@ import { fulfillmentService } from "../src/server/modules/fulfillment/fulfillmen
 import { warehouseService } from "../src/server/modules/warehouses/warehouse.service";
 import { quotationService } from "../src/server/modules/quotations/quotation.service";
 import { negotiationService } from "../src/server/modules/negotiation/negotiation.service";
-import { approvalService } from "../src/server/modules/approvals/approval.service";
 import { QuotationStatus, QuotationRevisionStatus, UserRole, WarehouseStatus } from "@prisma/client";
 import { BadRequestError, ConflictError } from "../src/server/shared/errors/errors";
 
@@ -52,15 +51,14 @@ async function main() {
             data: {
                 organizationId: orgId,
                 name: "Industrial Server Rack Pro",
-                sku: `SKU-SRV-${Date.now()}`,
                 basePrice: 1000,
-                unitCost: 600,
+                costPrice: 600,
                 category: "Hardware",
                 isActive: true,
             },
         });
     }
-    console.log(`Product: ${product.name} (SKU: ${product.sku}, ID: ${product.id})`);
+    console.log(`Product: ${product.name} (ID: ${product.id})`);
 
     // 2. Setup Warehouses and Inventory for Multi-Warehouse Split Demonstration
     console.log("\n--- Setting Up Warehouses & Inventory ---");
@@ -182,19 +180,8 @@ async function main() {
         orderDiscountPercent: 0,
     });
 
-    // Submit Quotation
-    const submitRes = await quotationService.submitQuotation(adminUser as any, quote.id);
-
-    // If pending approval, approve it
-    if (submitRes.status === QuotationStatus.PENDING_APPROVAL) {
-        const approvals = await approvalService.getApprovalsForQuotation(adminUser as any, quote.id);
-        const pendingStep = approvals.steps.find((s) => s.status === "PENDING");
-        if (pendingStep) {
-            await approvalService.approveStep(adminUser as any, pendingStep.id, {
-                comments: "Approved for fulfillment test",
-            });
-        }
-    }
+    // Submit Quotation (0% discount is approved immediately)
+    await quotationService.submitQuotation(adminUser as any, quote.id);
 
     // Deliver Quotation to customer
     await quotationService.sendQuotation(adminUser as any, quote.id);
