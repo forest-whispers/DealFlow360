@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { FinancialNumeral } from "@/components/shared/financial-numeral";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,7 @@ import { apiClient } from "@/lib/api-client";
 import { API_ROUTES } from "@/config/api";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
-import { QUOTATION_MANAGE_ROLES } from "@/lib/constants";
+import { QUOTATION_MANAGE_ROLES, FULFILLMENT_CREATE_ROLES } from "@/lib/constants";
 import {
     AlertCircle,
     ArrowLeft,
@@ -41,12 +42,18 @@ import {
     Save,
     Send,
     Trash2,
+    Truck,
 } from "lucide-react";
 import type {
     CanonicalQuotationResponse,
     QuotationLineResponse,
     SubmitQuotationResponse,
 } from "@/server/modules/quotations/quotation.types";
+import type {
+    CanonicalFulfillmentResponse,
+    FulfillmentListResponse,
+    FulfillmentSummaryResponse,
+} from "@/server/modules/fulfillment/fulfillment.types";
 
 interface QuotationDetailPageProps {
     params: Promise<{ id: string }>;
@@ -55,6 +62,7 @@ interface QuotationDetailPageProps {
 export default function QuotationDetailPage({ params }: QuotationDetailPageProps) {
     const resolvedParams = use(params);
     const id = resolvedParams.id;
+    const router = useRouter();
     const { user: currentUser } = useAuth();
     const { toast } = useToast();
 
@@ -63,6 +71,10 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+
+    // Fulfillment State
+    const [existingFulfillment, setExistingFulfillment] = useState<FulfillmentSummaryResponse | null>(null);
+    const [isCreatingFulfillment, setIsCreatingFulfillment] = useState<boolean>(false);
 
     // Editable Draft State
     const [draftLines, setDraftLines] = useState<QuotationLineResponse[]>([]);
@@ -88,6 +100,8 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
         quotation?.revision?.status === "APPROVED";
     const canManageQuotation =
         currentUser && QUOTATION_MANAGE_ROLES.includes(currentUser.role);
+    const canCreateFulfillment =
+        Boolean(currentUser && (FULFILLMENT_CREATE_ROLES as readonly string[]).includes(currentUser.role));
 
     // Warn on tab close / reload if there are unsaved modifications
     useEffect(() => {
@@ -119,6 +133,20 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
                     setIsDirty(false);
                     setErrorMessage(null);
                     setIsLoading(false);
+
+                    // If Confirmed: fetch existing fulfillment for UX button optimization
+                    if (data.status === "CONFIRMED") {
+                        apiClient
+                            .get<FulfillmentListResponse>(API_ROUTES.FULFILLMENTS.LIST, {
+                                params: { quotationId: id },
+                            })
+                            .then((fRes) => {
+                                if (isMounted && fRes.fulfillments && fRes.fulfillments.length > 0) {
+                                    setExistingFulfillment(fRes.fulfillments[0]);
+                                }
+                            })
+                            .catch(() => {});
+                    }
                 }
             } catch (err: unknown) {
                 if (isMounted) {
@@ -381,6 +409,57 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
         }
     };
 
+    // Domain Action: Create Fulfillment (POST /api/fulfillments)
+    const handleCreateFulfillment = async () => {
+        setIsCreatingFulfillment(true);
+
+        try {
+            const fulfillment = await apiClient.post<CanonicalFulfillmentResponse>(
+                API_ROUTES.FULFILLMENTS.CREATE,
+                { quotationId: id }
+            );
+
+            toast.success(
+                "Fulfillment Created",
+                `Successfully created fulfillment order ${fulfillment.fulfillmentNumber}.`
+            );
+            router.push(`/fulfillment/${fulfillment.id}`);
+        } catch (err: unknown) {
+            const msg =
+                err instanceof Error ? err.message : "Failed to create fulfillment.";
+
+            // If 409 Conflict: fetch existing fulfillment and route user to it
+            if (
+                msg.toLowerCase().includes("already exists") ||
+                (err as { status?: number })?.status === 409
+            ) {
+                try {
+                    const existingList = await apiClient.get<FulfillmentListResponse>(
+                        API_ROUTES.FULFILLMENTS.LIST,
+                        { params: { quotationId: id } }
+                    );
+
+                    if (existingList.fulfillments && existingList.fulfillments.length > 0) {
+                        const existing = existingList.fulfillments[0];
+                        setExistingFulfillment(existing);
+                        toast.info(
+                            "Fulfillment Exists",
+                            `A fulfillment order already exists (${existing.fulfillmentNumber}). Opening fulfillment...`
+                        );
+                        router.push(`/fulfillment/${existing.id}`);
+                        return;
+                    }
+                } catch {
+                    // Fall through to error toast
+                }
+            }
+
+            toast.error("Fulfillment Creation Failed", msg);
+        } finally {
+            setIsCreatingFulfillment(false);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="space-y-6">
@@ -528,6 +607,31 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
                         >
                             Send Quotation
                         </Button>
+                    )}
+
+                    {quotation.status === "CONFIRMED" && (
+                        existingFulfillment ? (
+                            <Link href={`/fulfillment/${existingFulfillment.id}`}>
+                                <Button
+                                    variant="primary"
+                                    size="default"
+                                    leftIcon={<Truck className="w-4 h-4" />}
+                                >
+                                    View Fulfillment ({existingFulfillment.fulfillmentNumber})
+                                </Button>
+                            </Link>
+                        ) : canCreateFulfillment ? (
+                            <Button
+                                variant="primary"
+                                size="default"
+                                leftIcon={<Truck className="w-4 h-4" />}
+                                isLoading={isCreatingFulfillment}
+                                disabled={isCreatingFulfillment}
+                                onClick={handleCreateFulfillment}
+                            >
+                                Create Fulfillment
+                            </Button>
+                        ) : null
                     )}
                 </div>
             </div>
