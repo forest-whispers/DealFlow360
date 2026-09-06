@@ -1,6 +1,6 @@
 import { env } from "@/server/shared/config/env";
 
-export const AI_DEFAULT_TIMEOUT_MS = 12000;
+export const AI_DEFAULT_TIMEOUT_MS = 200000;
 export const AI_DEFAULT_TEMPERATURE = 0.2;
 
 /**

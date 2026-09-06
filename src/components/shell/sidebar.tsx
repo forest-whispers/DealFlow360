@@ -18,7 +18,12 @@ import {
     ChevronRight,
     Building2,
 } from "lucide-react";
-import { INTERNAL_NAV_SECTIONS, type NavItem, APPROVAL_NAV_ROLES } from "@/lib/constants";
+import {
+    INTERNAL_NAV_SECTIONS,
+    type NavItem,
+    APPROVAL_NAV_ROLES,
+    DISCOUNT_GOVERNANCE_READ_ROLES,
+} from "@/lib/constants";
 import { useAuth } from "@/context/auth-context";
 import { cn } from "@/lib/cn";
 
@@ -67,6 +72,14 @@ export function Sidebar({ isCollapsed, onToggleCollapse }: SidebarProps) {
                                 .filter((item: NavItem) => {
                                     if (item.href === "/approvals") {
                                         return Boolean(user && APPROVAL_NAV_ROLES.includes(user.role));
+                                    }
+                                    if (item.href === "/discount-governance") {
+                                        return Boolean(
+                                            user &&
+                                                (DISCOUNT_GOVERNANCE_READ_ROLES as readonly string[]).includes(
+                                                    user.role
+                                                )
+                                        );
                                     }
                                     return true;
                                 })
@@ -189,6 +202,14 @@ export function MobileSidebar({
                                     .filter((item: NavItem) => {
                                         if (item.href === "/approvals") {
                                             return Boolean(user && APPROVAL_NAV_ROLES.includes(user.role));
+                                        }
+                                        if (item.href === "/discount-governance") {
+                                            return Boolean(
+                                                user &&
+                                                    (DISCOUNT_GOVERNANCE_READ_ROLES as readonly string[]).includes(
+                                                        user.role
+                                                    )
+                                            );
                                         }
                                         return true;
                                     })

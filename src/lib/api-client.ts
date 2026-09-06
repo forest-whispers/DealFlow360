@@ -121,4 +121,41 @@ export const apiClient = {
         }),
     getDashboard: <T>() =>
         request<T>(API_ROUTES.DASHBOARD, { method: "GET" }),
+
+    // Warehouse & Inventory helpers
+    updateWarehouse: <T>(id: string, body: unknown) =>
+        request<T>(API_ROUTES.WAREHOUSES.BY_ID(id), { method: "PATCH", body }),
+    updateWarehouseStatus: <T>(id: string, status: "ACTIVE" | "INACTIVE") =>
+        request<T>(API_ROUTES.WAREHOUSES.STATUS(id), { method: "PATCH", body: { status } }),
+    addWarehouseInventory: <T>(warehouseId: string, body: unknown) =>
+        request<T>(API_ROUTES.WAREHOUSES.INVENTORY.CREATE(warehouseId), { method: "POST", body }),
+    updateWarehouseInventoryQty: <T>(warehouseId: string, inventoryId: string, availableQty: number) =>
+        request<T>(API_ROUTES.WAREHOUSES.INVENTORY.UPDATE_QTY(warehouseId, inventoryId), {
+            method: "PATCH",
+            body: { availableQty },
+        }),
+
+    // Discount Governance helpers
+    getDiscountApprovalPolicy: <T>() =>
+        request<T>(API_ROUTES.DISCOUNT_GOVERNANCE.APPROVAL_POLICY, { method: "GET" }),
+    updateDiscountApprovalPolicy: <T>(body: unknown) =>
+        request<T>(API_ROUTES.DISCOUNT_GOVERNANCE.APPROVAL_POLICY, { method: "PATCH", body }),
+    listDiscountTierRules: <T>(params?: { isActive?: boolean }) =>
+        request<T>(API_ROUTES.DISCOUNT_GOVERNANCE.TIER_RULES.LIST, { method: "GET", params }),
+    createDiscountTierRule: <T>(body: unknown) =>
+        request<T>(API_ROUTES.DISCOUNT_GOVERNANCE.TIER_RULES.CREATE, { method: "POST", body }),
+    updateDiscountTierRule: <T>(id: string, body: unknown) =>
+        request<T>(API_ROUTES.DISCOUNT_GOVERNANCE.TIER_RULES.BY_ID(id), { method: "PATCH", body }),
+    archiveDiscountTierRule: <T>(id: string) =>
+        request<T>(API_ROUTES.DISCOUNT_GOVERNANCE.TIER_RULES.BY_ID(id), { method: "DELETE" }),
+    listDiscountCategoryRules: <T>(params?: { isActive?: boolean }) =>
+        request<T>(API_ROUTES.DISCOUNT_GOVERNANCE.CATEGORY_RULES.LIST, { method: "GET", params }),
+    createDiscountCategoryRule: <T>(body: unknown) =>
+        request<T>(API_ROUTES.DISCOUNT_GOVERNANCE.CATEGORY_RULES.CREATE, { method: "POST", body }),
+    updateDiscountCategoryRule: <T>(id: string, body: unknown) =>
+        request<T>(API_ROUTES.DISCOUNT_GOVERNANCE.CATEGORY_RULES.BY_ID(id), { method: "PATCH", body }),
+    archiveDiscountCategoryRule: <T>(id: string) =>
+        request<T>(API_ROUTES.DISCOUNT_GOVERNANCE.CATEGORY_RULES.BY_ID(id), { method: "DELETE" }),
+    evaluateDiscountLine: <T>(body: unknown) =>
+        request<T>(API_ROUTES.DISCOUNT_GOVERNANCE.EVALUATE_LINE, { method: "POST", body }),
 };

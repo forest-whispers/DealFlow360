@@ -199,6 +199,18 @@ export const WAREHOUSE_MANAGE_ROLES: ("ADMIN" | "FINANCE_OPERATIONS")[] = [
     "FINANCE_OPERATIONS",
 ];
 
+export const DISCOUNT_GOVERNANCE_READ_ROLES: ("ADMIN" | "SALES_MANAGER" | "SALES_REP" | "FINANCE_OPERATIONS")[] = [
+    "ADMIN",
+    "SALES_MANAGER",
+    "SALES_REP",
+    "FINANCE_OPERATIONS",
+];
+
+export const DISCOUNT_GOVERNANCE_MANAGE_ROLES: ("ADMIN" | "SALES_MANAGER")[] = [
+    "ADMIN",
+    "SALES_MANAGER",
+];
+
 export const BILLING_GENERATE_ROLES: ("ADMIN" | "FINANCE_OPERATIONS" | "SALES_MANAGER")[] = [
     "ADMIN",
     "FINANCE_OPERATIONS",
@@ -289,7 +301,7 @@ export const INTERNAL_NAV_SECTIONS: NavSection[] = [
     {
         title: "Configuration",
         items: [
-            { label: "Discount Governance", href: "/governance", icon: "Sliders" },
+            { label: "Discount Governance", href: "/discount-governance", icon: "Sliders" },
             { label: "Warehouses", href: "/warehouses", icon: "Warehouse" },
         ],
     },

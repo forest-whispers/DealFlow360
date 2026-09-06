@@ -19,6 +19,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { RoleGate } from "@/components/shared/role-gate";
 import { CreateWarehouseModal } from "@/components/warehouses/create-warehouse-modal";
+import { EditWarehouseModal } from "@/components/warehouses/edit-warehouse-modal";
+import { AddInventoryModal } from "@/components/warehouses/add-inventory-modal";
+import { UpdateInventoryModal } from "@/components/warehouses/update-inventory-modal";
 import { apiClient } from "@/lib/api-client";
 import { API_ROUTES } from "@/config/api";
 import { useAuth } from "@/context/auth-context";
@@ -26,6 +29,7 @@ import { WAREHOUSE_READ_ROLES, WAREHOUSE_MANAGE_ROLES } from "@/lib/constants";
 import {
     Boxes,
     ChevronRight,
+    Edit3,
     Package,
     Plus,
     RotateCw,
@@ -45,8 +49,15 @@ export default function WarehousesPage() {
     const [isLoadingWarehouses, setIsLoadingWarehouses] = useState<boolean>(true);
     const [warehouseError, setWarehouseError] = useState<string | null>(null);
 
-    // Create Modal
+    // Create & Edit Warehouse Modals
     const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+    const [warehouseToEdit, setWarehouseToEdit] = useState<WarehouseResponse | null>(null);
+
+    // Add & Edit Inventory Modals
+    const [isAddInventoryOpen, setIsAddInventoryOpen] = useState<boolean>(false);
+    const [isUpdateInventoryOpen, setIsUpdateInventoryOpen] = useState<boolean>(false);
+    const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryItemResponse | null>(null);
 
     // Selected Warehouse for Inventory View
     const [selectedWarehouse, setSelectedWarehouse] = useState<WarehouseResponse | null>(null);
@@ -281,6 +292,20 @@ export default function WarehousesPage() {
                                                             >
                                                                 {wh.status}
                                                             </Badge>
+                                                            {canManageWarehouses && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setWarehouseToEdit(wh);
+                                                                        setIsEditModalOpen(true);
+                                                                    }}
+                                                                    title="Edit facility parameters"
+                                                                    className="p-1 rounded text-[#64748B] hover:text-[#1E40AF] hover:bg-white transition-colors cursor-pointer"
+                                                                >
+                                                                    <Edit3 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            )}
                                                             <ChevronRight
                                                                 className={`w-4 h-4 transition-transform ${
                                                                     isSelected
@@ -321,20 +346,33 @@ export default function WarehousesPage() {
                                             : "Select a Warehouse"}
                                     </CardTitle>
                                     <p className="text-[12px] text-[#64748B] mt-0.5">
-                                        Read-only inventory levels available for fulfillment allocation
+                                        Physical inventory levels available for fulfillment allocation
                                     </p>
                                 </div>
 
-                                {/* Inventory Search */}
+                                {/* Inventory Controls: Search & Add Inventory */}
                                 {selectedWarehouse && (
-                                    <div className="w-full sm:w-56">
-                                        <Input
-                                            placeholder="Search product / SKU..."
-                                            value={inventorySearch}
-                                            onChange={(e) => setInventorySearch(e.target.value)}
-                                            className="h-8 text-[12px]"
-                                            leftIcon={<Search className="w-3.5 h-3.5 text-[#94A3B8]" />}
-                                        />
+                                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                                        <div className="w-full sm:w-48">
+                                            <Input
+                                                placeholder="Search product / SKU..."
+                                                value={inventorySearch}
+                                                onChange={(e) => setInventorySearch(e.target.value)}
+                                                className="h-8 text-[12px]"
+                                                leftIcon={<Search className="w-3.5 h-3.5 text-[#94A3B8]" />}
+                                            />
+                                        </div>
+                                        {canManageWarehouses && (
+                                            <Button
+                                                variant="primary"
+                                                size="sm"
+                                                className="shrink-0 h-8 text-[12px]"
+                                                leftIcon={<Plus className="w-3.5 h-3.5" />}
+                                                onClick={() => setIsAddInventoryOpen(true)}
+                                            >
+                                                Add Inventory
+                                            </Button>
+                                        )}
                                     </div>
                                 )}
                             </CardHeader>
@@ -353,11 +391,12 @@ export default function WarehousesPage() {
                                                     <TableHead>Category</TableHead>
                                                     <TableHead>SKU</TableHead>
                                                     <TableHead className="text-right">Available Qty</TableHead>
+                                                    {canManageWarehouses && <TableHead className="w-16 text-right">Actions</TableHead>}
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                                 {Array.from({ length: 5 }).map((_, i) => (
-                                                    <TableRowSkeleton key={i} columns={4} />
+                                                    <TableRowSkeleton key={i} columns={canManageWarehouses ? 5 : 4} />
                                                 ))}
                                             </TableBody>
                                         </Table>
@@ -381,6 +420,18 @@ export default function WarehousesPage() {
                                                     : "This facility currently has no inventory items recorded."
                                             }
                                         />
+                                        {canManageWarehouses && !inventorySearch && (
+                                            <div className="mt-3 text-center">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    leftIcon={<Plus className="w-3.5 h-3.5" />}
+                                                    onClick={() => setIsAddInventoryOpen(true)}
+                                                >
+                                                    Add First Inventory Record
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <Table>
@@ -398,6 +449,11 @@ export default function WarehousesPage() {
                                                 <TableHead className="w-32 text-right font-semibold text-[#0F172A]">
                                                     Available Qty
                                                 </TableHead>
+                                                {canManageWarehouses && (
+                                                    <TableHead className="w-16 text-right font-semibold text-[#0F172A]">
+                                                        Action
+                                                    </TableHead>
+                                                )}
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -432,11 +488,26 @@ export default function WarehousesPage() {
                                                                 item.availableQty > 0
                                                                     ? "text-[#16A34A]"
                                                                     : "text-[#DC2626]"
-                                                            }`}
+                                                                }`}
                                                         >
                                                             {item.availableQty.toLocaleString()} units
                                                         </span>
                                                     </TableCell>
+                                                    {canManageWarehouses && (
+                                                        <TableCell className="text-right">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-7 px-2 text-[12px]"
+                                                                onClick={() => {
+                                                                    setSelectedInventoryItem(item);
+                                                                    setIsUpdateInventoryOpen(true);
+                                                                }}
+                                                            >
+                                                                Edit
+                                                            </Button>
+                                                        </TableCell>
+                                                    )}
                                                 </TableRow>
                                             ))}
                                         </TableBody>
@@ -456,6 +527,51 @@ export default function WarehousesPage() {
                         setSelectedWarehouse(newWh);
                     }}
                 />
+
+                {/* Edit Warehouse Modal */}
+                <EditWarehouseModal
+                    isOpen={isEditModalOpen}
+                    warehouse={warehouseToEdit}
+                    onClose={() => {
+                        setIsEditModalOpen(false);
+                        setWarehouseToEdit(null);
+                    }}
+                    onSuccess={(updatedWh) => {
+                        setRefreshTrigger((prev) => prev + 1);
+                        if (selectedWarehouse?.id === updatedWh.id) {
+                            setSelectedWarehouse(updatedWh);
+                        }
+                    }}
+                />
+
+                {/* Add Inventory Modal */}
+                {selectedWarehouse && (
+                    <AddInventoryModal
+                        isOpen={isAddInventoryOpen}
+                        warehouseId={selectedWarehouse.id}
+                        warehouseName={selectedWarehouse.name}
+                        onClose={() => setIsAddInventoryOpen(false)}
+                        onSuccess={() => {
+                            setRefreshTrigger((prev) => prev + 1);
+                        }}
+                    />
+                )}
+
+                {/* Update Inventory Modal */}
+                {selectedWarehouse && (
+                    <UpdateInventoryModal
+                        isOpen={isUpdateInventoryOpen}
+                        warehouseId={selectedWarehouse.id}
+                        inventoryItem={selectedInventoryItem}
+                        onClose={() => {
+                            setIsUpdateInventoryOpen(false);
+                            setSelectedInventoryItem(null);
+                        }}
+                        onSuccess={() => {
+                            setRefreshTrigger((prev) => prev + 1);
+                        }}
+                    />
+                )}
             </div>
         </RoleGate>
     );
