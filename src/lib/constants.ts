@@ -164,6 +164,7 @@ export const BILLING_INTERVAL_META: Record<string, { label: string }> = {
 export const CUSTOMER_MANAGE_ROLES = ["ADMIN", "SALES_MANAGER", "SALES_REP"];
 export const CUSTOMER_STATUS_ROLES = ["ADMIN", "SALES_MANAGER"];
 export const PRODUCT_MANAGE_ROLES = ["ADMIN", "SALES_MANAGER"];
+export const QUOTATION_MANAGE_ROLES = ["ADMIN", "SALES_MANAGER", "SALES_REP"];
 
 // ==========================================
 // Role Display Metadata

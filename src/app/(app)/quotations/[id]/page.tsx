@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { PageHeader } from "@/components/shared/page-header";
+import React, { useEffect, useState, use } from "react";
+import Link from "next/link";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { FinancialNumeral } from "@/components/shared/financial-numeral";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
     Table,
     TableHeader,
@@ -14,107 +14,388 @@ import {
     TableRow,
     TableHead,
     TableCell,
-    TableFooter,
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { Skeleton, TableRowSkeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CustomerContextCard } from "@/components/quotations/customer-context-card";
+import { CommercialSummaryCard } from "@/components/quotations/commercial-summary-card";
+import { GovernancePanel } from "@/components/quotations/governance-panel";
+import { DealLifecycleBanner } from "@/components/quotations/deal-lifecycle-banner";
+import {
+    AddLineModal,
+    type NewQuotationLineData,
+} from "@/components/quotations/add-line-modal";
 import { apiClient } from "@/lib/api-client";
 import { API_ROUTES } from "@/config/api";
+import { useAuth } from "@/context/auth-context";
+import { useToast } from "@/context/toast-context";
+import { QUOTATION_MANAGE_ROLES } from "@/lib/constants";
 import {
+    AlertCircle,
     ArrowLeft,
-    Building2,
-    FileText,
-    Info,
-    Layers,
+    Check,
+    Package,
+    Plus,
+    Save,
+    Send,
+    Trash2,
 } from "lucide-react";
-import type { CanonicalQuotationResponse } from "@/server/modules/quotations/quotation.types";
+import type {
+    CanonicalQuotationResponse,
+    QuotationLineResponse,
+    SubmitQuotationResponse,
+} from "@/server/modules/quotations/quotation.types";
 
-export default function QuotationDetailPage() {
-    const params = useParams();
-    const router = useRouter();
-    const id = params?.id as string;
+interface QuotationDetailPageProps {
+    params: Promise<{ id: string }>;
+}
 
+export default function QuotationDetailPage({ params }: QuotationDetailPageProps) {
+    const resolvedParams = use(params);
+    const id = resolvedParams.id;
+    const { user: currentUser } = useAuth();
+    const { toast } = useToast();
+
+    // Authoritative Quotation data
     const [quotation, setQuotation] = useState<CanonicalQuotationResponse | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const [retryCount, setRetryCount] = useState<number>(0);
+    const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
-    const handleRetry = () => {
-        setIsLoading(true);
-        setErrorMessage(null);
-        setRetryCount((prev) => prev + 1);
-    };
+    // Editable Draft State
+    const [draftLines, setDraftLines] = useState<QuotationLineResponse[]>([]);
+    const [orderDiscountPercent, setOrderDiscountPercent] = useState<number>(0);
+    const [isDirty, setIsDirty] = useState<boolean>(false);
 
+    // Live Authoritative Preview State (from POST /api/quotations/:id/preview)
+    const [previewQuotation, setPreviewQuotation] = useState<CanonicalQuotationResponse | null>(null);
+    const [isPreviewLoading, setIsPreviewLoading] = useState<boolean>(false);
+
+    // Command Actions State
+    const [isSaving, setIsSaving] = useState<boolean>(false);
+    const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+    const [isSending, setIsSending] = useState<boolean>(false);
+    const [submissionError, setSubmissionError] = useState<string | null>(null);
+
+    // Modals
+    const [isAddLineModalOpen, setIsAddLineModalOpen] = useState<boolean>(false);
+
+    const isDraft = quotation?.status === "DRAFT";
+    const isApproved = quotation?.status === "APPROVED";
+    const canManageQuotation =
+        currentUser && QUOTATION_MANAGE_ROLES.includes(currentUser.role);
+
+    // Warn on tab close / reload if there are unsaved modifications
     useEffect(() => {
-        if (!id) return;
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (isDirty) {
+                e.preventDefault();
+            }
+        };
 
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    }, [isDirty]);
+
+    // Initial Load: Fetch Canonical Quotation
+    useEffect(() => {
         let isMounted = true;
 
-        async function fetchQuotationData() {
+        async function fetchQuotation() {
             try {
                 const data = await apiClient.get<CanonicalQuotationResponse>(
                     API_ROUTES.QUOTATIONS.BY_ID(id)
                 );
+
                 if (isMounted) {
                     setQuotation(data);
+                    setPreviewQuotation(data);
+                    setDraftLines(data.revision.lines || []);
+                    setOrderDiscountPercent(data.revision.orderDiscountPercent || 0);
+                    setIsDirty(false);
+                    setErrorMessage(null);
                     setIsLoading(false);
                 }
             } catch (err: unknown) {
                 if (isMounted) {
                     const message =
-                        err instanceof Error ? err.message : "Quotation not found or failed to load.";
+                        err instanceof Error
+                            ? err.message
+                            : "Quotation not found or failed to load.";
                     setErrorMessage(message);
                     setIsLoading(false);
                 }
             }
         }
 
-        fetchQuotationData();
+        fetchQuotation();
 
         return () => {
             isMounted = false;
         };
-    }, [id, retryCount]);
+    }, [id, refreshTrigger]);
+
+    // Debounced Live Preview: triggers POST /api/quotations/:id/preview when draftLines or orderDiscountPercent change
+    useEffect(() => {
+        if (!isDraft || !isDirty || !quotation) return;
+
+        let isMounted = true;
+        const timer = setTimeout(async () => {
+            setIsPreviewLoading(true);
+            try {
+                const payload = {
+                    lines: draftLines.map((l) => ({
+                        lineNumber: l.lineNumber,
+                        productId: l.productId,
+                        variantId: l.variantId || null,
+                        quantity: l.quantity,
+                        discountPercent: l.discountPercent,
+                    })),
+                    orderDiscountPercent,
+                };
+
+                const previewData = await apiClient.post<CanonicalQuotationResponse>(
+                    API_ROUTES.QUOTATIONS.PREVIEW(id),
+                    payload
+                );
+
+                if (isMounted) {
+                    setPreviewQuotation(previewData);
+                    setIsPreviewLoading(false);
+                }
+            } catch {
+                if (isMounted) {
+                    setIsPreviewLoading(false);
+                }
+            }
+        }, 300);
+
+        return () => {
+            isMounted = false;
+            clearTimeout(timer);
+        };
+    }, [isDraft, isDirty, draftLines, orderDiscountPercent, id, quotation]);
+
+    // Line Operations (Mutates Local Draft State Only)
+    const handleAddLine = (item: NewQuotationLineData) => {
+        const nextLineNumber =
+            draftLines.length > 0
+                ? Math.max(...draftLines.map((l) => l.lineNumber)) + 1
+                : 1;
+
+        const subtotal = item.quantity * item.unitPrice;
+        const discountAmount = (subtotal * item.discountPercent) / 100;
+        const total = subtotal - discountAmount;
+        const cost = item.quantity * item.unitCost;
+        const margin = total - cost;
+        const marginPercent = total > 0 ? (margin / total) * 100 : 0;
+
+        const newLine: QuotationLineResponse = {
+            lineNumber: nextLineNumber,
+            productId: item.productId,
+            variantId: item.variantId || null,
+            name: item.name,
+            sku: item.sku || null,
+            category: item.category,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            unitCost: item.unitCost,
+            discountPercent: item.discountPercent,
+            lineSubtotal: subtotal,
+            lineDiscount: discountAmount,
+            lineTotal: total,
+            margin,
+            marginPercent,
+        };
+
+        setDraftLines((prev) => [...prev, newLine]);
+        setIsDirty(true);
+    };
+
+    const handleQuantityChange = (lineNumber: number, newQtyStr: string) => {
+        const parsed = parseInt(newQtyStr, 10);
+        const qty = isNaN(parsed) || parsed < 1 ? 1 : parsed;
+
+        setDraftLines((prev) =>
+            prev.map((line) => {
+                if (line.lineNumber !== lineNumber) return line;
+                return { ...line, quantity: qty };
+            })
+        );
+        setIsDirty(true);
+    };
+
+    const handleDiscountChange = (lineNumber: number, newDiscountStr: string) => {
+        const parsed = parseFloat(newDiscountStr);
+        const discount = isNaN(parsed) ? 0 : Math.min(100, Math.max(0, parsed));
+
+        setDraftLines((prev) =>
+            prev.map((line) => {
+                if (line.lineNumber !== lineNumber) return line;
+                return { ...line, discountPercent: discount };
+            })
+        );
+        setIsDirty(true);
+    };
+
+    const handleRemoveLine = (lineNumber: number) => {
+        setDraftLines((prev) => prev.filter((line) => line.lineNumber !== lineNumber));
+        setIsDirty(true);
+    };
+
+    const handleOrderDiscountChange = (percent: number) => {
+        setOrderDiscountPercent(percent);
+        setIsDirty(true);
+    };
+
+    // Domain Action: Save Draft (PUT /api/quotations/:id/draft)
+    const handleSaveDraft = async () => {
+        if (!isDraft) return;
+
+        setIsSaving(true);
+        setSubmissionError(null);
+
+        try {
+            const payload = {
+                lines: draftLines.map((l) => ({
+                    lineNumber: l.lineNumber,
+                    productId: l.productId,
+                    variantId: l.variantId || null,
+                    quantity: l.quantity,
+                    discountPercent: l.discountPercent,
+                })),
+                orderDiscountPercent,
+            };
+
+            const savedQuotation = await apiClient.put<CanonicalQuotationResponse>(
+                API_ROUTES.QUOTATIONS.SAVE_DRAFT(id),
+                payload
+            );
+
+            setQuotation(savedQuotation);
+            setPreviewQuotation(savedQuotation);
+            setDraftLines(savedQuotation.revision.lines || []);
+            setOrderDiscountPercent(savedQuotation.revision.orderDiscountPercent || 0);
+            setIsDirty(false);
+
+            toast.success("Draft Saved", "Quotation line items and commercial terms persisted.");
+        } catch (err: unknown) {
+            const msg =
+                err instanceof Error ? err.message : "Failed to save quotation draft.";
+            toast.error("Save Failed", msg);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // Domain Action: Submit Quotation (POST /api/quotations/:id/submit)
+    const handleSubmitQuotation = async () => {
+        if (!isDraft) return;
+
+        if (draftLines.length === 0) {
+            toast.error("Cannot Submit", "Please add at least one line item before submitting.");
+            return;
+        }
+
+        setIsSubmitting(true);
+        setSubmissionError(null);
+
+        try {
+            // If there are unsaved local modifications, save them first
+            if (isDirty) {
+                const savePayload = {
+                    lines: draftLines.map((l) => ({
+                        lineNumber: l.lineNumber,
+                        productId: l.productId,
+                        variantId: l.variantId || null,
+                        quantity: l.quantity,
+                        discountPercent: l.discountPercent,
+                    })),
+                    orderDiscountPercent,
+                };
+                await apiClient.put<CanonicalQuotationResponse>(
+                    API_ROUTES.QUOTATIONS.SAVE_DRAFT(id),
+                    savePayload
+                );
+            }
+
+            const response = await apiClient.post<SubmitQuotationResponse>(
+                API_ROUTES.QUOTATIONS.SUBMIT(id)
+            );
+
+            if (response.status === "APPROVED") {
+                toast.success(
+                    "Quotation Approved",
+                    "Discounts are within policy limits. The quote is approved automatically."
+                );
+            } else if (response.status === "PENDING_APPROVAL") {
+                const levelName = response.approvalLevel
+                    ? response.approvalLevel.replace(/_/g, " ")
+                    : "Management";
+                toast.warning(
+                    "Submitted for Approval",
+                    `Quotation requires ${levelName} review before it can be sent.`
+                );
+            }
+
+            // Refresh authoritative state from backend
+            setRefreshTrigger((prev) => prev + 1);
+        } catch (err: unknown) {
+            const msg =
+                err instanceof Error ? err.message : "Submission rejected by governance.";
+            setSubmissionError(msg);
+            toast.error("Submission Rejected", msg);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // Domain Action: Send Quotation (POST /api/quotations/:id/send)
+    const handleSendQuotation = async () => {
+        if (!isApproved) return;
+
+        setIsSending(true);
+
+        try {
+            const updated = await apiClient.post<CanonicalQuotationResponse>(
+                API_ROUTES.QUOTATIONS.SEND(id)
+            );
+
+            setQuotation(updated);
+            setPreviewQuotation(updated);
+            toast.success(
+                "Quotation Sent",
+                "Proposal has been delivered to customer and is now active in the portal."
+            );
+        } catch (err: unknown) {
+            const msg =
+                err instanceof Error ? err.message : "Failed to send quotation.";
+            toast.error("Send Failed", msg);
+        } finally {
+            setIsSending(false);
+        }
+    };
 
     if (isLoading) {
         return (
             <div className="space-y-6">
-                {/* Header Skeleton */}
-                <div className="space-y-2 pb-6 border-b border-[#E2E8F0]">
-                    <Skeleton className="h-4 w-48" />
+                <div className="space-y-2 pb-4 border-b border-[#E2E8F0]">
+                    <Skeleton className="h-4 w-40" />
                     <div className="flex items-center justify-between">
-                        <Skeleton className="h-7 w-64" />
-                        <Skeleton className="h-8 w-32" />
+                        <Skeleton className="h-8 w-64" />
+                        <div className="flex gap-2">
+                            <Skeleton className="h-9 w-24" />
+                            <Skeleton className="h-9 w-32" />
+                        </div>
                     </div>
                 </div>
-
-                {/* Metric Cards Skeleton */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                        <div
-                            key={i}
-                            className="rounded-lg border border-[#E2E8F0] bg-white p-4 space-y-2"
-                        >
-                            <Skeleton className="h-3 w-28" />
-                            <Skeleton className="h-7 w-36" />
-                            <Skeleton className="h-3 w-24" />
-                        </div>
-                    ))}
-                </div>
-
-                {/* Content Skeleton */}
-                <div className="rounded-lg border border-[#E2E8F0] bg-white p-5 space-y-4">
-                    <Skeleton className="h-5 w-48" />
-                    <Skeleton className="h-4 w-80" />
-                    <div className="pt-2">
-                        <Table>
-                            <TableBody>
-                                <TableRowSkeleton columns={7} />
-                                <TableRowSkeleton columns={7} />
-                                <TableRowSkeleton columns={7} />
-                            </TableBody>
-                        </Table>
+                <div className="h-20 bg-[#E2E8F0] rounded-lg animate-pulse" />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 h-96 bg-[#E2E8F0] rounded-lg animate-pulse" />
+                    <div className="space-y-4">
+                        <div className="h-64 bg-[#E2E8F0] rounded-lg animate-pulse" />
+                        <div className="h-36 bg-[#E2E8F0] rounded-lg animate-pulse" />
                     </div>
                 </div>
             </div>
@@ -124,307 +405,389 @@ export default function QuotationDetailPage() {
     if (errorMessage || !quotation) {
         return (
             <div className="space-y-6">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push("/quotations")}
-                    leftIcon={<ArrowLeft className="w-3.5 h-3.5" />}
+                <Link
+                    href="/quotations"
+                    className="inline-flex items-center text-[13px] font-medium text-[#64748B] hover:text-[#0F172A]"
                 >
+                    <ArrowLeft className="w-4 h-4 mr-1" />
                     Back to Quotations
-                </Button>
-
-                <ErrorState
-                    title="Unable to open quotation"
-                    message={errorMessage || "The requested quotation could not be retrieved."}
-                    onRetry={handleRetry}
-                />
+                </Link>
+                <Card>
+                    <CardContent className="py-12 text-center">
+                        <ErrorState
+                            title="Quotation Not Found"
+                            message={errorMessage || "The requested deal workspace could not be loaded."}
+                            onRetry={() => {
+                                setIsLoading(true);
+                                setErrorMessage(null);
+                                setRefreshTrigger((prev) => prev + 1);
+                            }}
+                        />
+                    </CardContent>
+                </Card>
             </div>
         );
     }
 
-    const { revision, customer } = quotation;
-    const lines = revision.lines || [];
+    // Authoritative rendered state comes from previewQuotation (or persisted quotation)
+    const currentRevision = previewQuotation?.revision ?? quotation.revision;
+    const currentSummary = currentRevision.summary;
+    const currentEvaluation = currentRevision.evaluation;
+    const displayLines = isDraft
+        ? draftLines.map((draftLine) => {
+              // Match authoritative preview calculations for this lineNumber if available
+              const previewMatch = previewQuotation?.revision.lines.find(
+                  (pl) => pl.lineNumber === draftLine.lineNumber
+              );
+              return previewMatch ?? draftLine;
+          })
+        : currentRevision.lines;
 
     return (
         <div className="space-y-6">
-            {/* Standard Enterprise Page Header */}
-            <PageHeader
-                title={quotation.quoteNumber}
-                description="Commercial quotation details, revision snapshot, and line item yield."
-                breadcrumbs={[
-                    { label: "DealFlow360", href: "/dashboard" },
-                    { label: "Quotations", href: "/quotations" },
-                    { label: quotation.quoteNumber },
-                ]}
-                badge={
-                    <div className="flex items-center gap-1.5">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-[#F1F5F9] text-[#475569] border border-[#CBD5E1]">
-                            Rev {revision.revisionNumber}
-                        </span>
-                        <StatusBadge type="quotation" status={quotation.status} size="sm" />
-                        {customer.customerTier && (
-                            <StatusBadge type="tier" status={customer.customerTier} size="sm" />
+            {/* Breadcrumb Navigation */}
+            <div>
+                <Link
+                    href="/quotations"
+                    className="inline-flex items-center text-[13px] font-medium text-[#64748B] hover:text-[#0F172A] transition-colors"
+                >
+                    <ArrowLeft className="w-4 h-4 mr-1.5" />
+                    Back to Quotations
+                </Link>
+            </div>
+
+            {/* Deal Workspace Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0]">
+                <div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <h1 className="text-[22px] leading-[28px] font-bold text-[#0F172A]">
+                            {quotation.quoteNumber}
+                        </h1>
+                        <Badge variant="neutral" size="default">
+                            Revision {currentRevision.revisionNumber}
+                        </Badge>
+                        <StatusBadge type="quotation" status={quotation.status} />
+                        {isDirty && (
+                            <Badge variant="warning" dot size="default">
+                                Unsaved Changes
+                            </Badge>
                         )}
                     </div>
-                }
-                actions={
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => router.push("/quotations")}
-                        leftIcon={<ArrowLeft className="w-3.5 h-3.5" />}
-                    >
-                        Back to Quotations
-                    </Button>
-                }
+                    <div className="flex items-center gap-3 text-[12px] text-[#64748B] mt-1 flex-wrap">
+                        <span>Customer: <strong className="text-[#0F172A]">{quotation.customer.name}</strong></span>
+                        <span>•</span>
+                        <span>Revision Status: <strong className="text-[#0F172A]">{currentRevision.status}</strong></span>
+                    </div>
+                </div>
+
+                {/* Header Action Commands */}
+                <div className="flex items-center gap-2">
+                    {isDraft && canManageQuotation && (
+                        <>
+                            <Button
+                                variant="outline"
+                                size="default"
+                                leftIcon={<Save className="w-4 h-4" />}
+                                isLoading={isSaving}
+                                disabled={!isDirty || isSaving}
+                                onClick={handleSaveDraft}
+                            >
+                                Save Draft
+                            </Button>
+
+                            <Button
+                                variant="primary"
+                                size="default"
+                                leftIcon={<Check className="w-4 h-4" />}
+                                isLoading={isSubmitting}
+                                disabled={draftLines.length === 0 || isSubmitting}
+                                onClick={handleSubmitQuotation}
+                            >
+                                Submit Quote
+                            </Button>
+                        </>
+                    )}
+
+                    {isApproved && canManageQuotation && (
+                        <Button
+                            variant="primary"
+                            size="default"
+                            leftIcon={<Send className="w-4 h-4" />}
+                            isLoading={isSending}
+                            disabled={isSending}
+                            onClick={handleSendQuotation}
+                        >
+                            Send Quotation
+                        </Button>
+                    )}
+                </div>
+            </div>
+
+            {/* Submission Error Banner if rejected */}
+            {submissionError && (
+                <div className="flex items-start gap-2.5 p-3.5 rounded-md bg-[#FEF2F2] border border-[#FECACA] text-[#B91C1C] text-[12px] leading-relaxed">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                        <strong className="block">Submission Rejected by Discount Governance:</strong>
+                        <span>{submissionError}</span>
+                    </div>
+                </div>
+            )}
+
+            {/* Lifecycle Status & Unsaved Guidance Banner */}
+            <DealLifecycleBanner
+                status={quotation.status}
+                isDirty={isDirty}
+                approvalLevel={currentEvaluation?.approvalLevel}
             />
 
-            {/* Commercial Summary Cards Grid (Authoritative figures from backend) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* 1. Net Commercial Total */}
-                <Card>
-                    <CardContent className="p-4 space-y-1">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                            Net Commercial Total
-                        </span>
-                        <div>
-                            <FinancialNumeral
-                                amount={revision.summary.total}
-                                variant="heading"
-                                className="text-[#0F172A]"
-                            />
-                        </div>
-                        <p className="text-[11px] leading-4 text-[#475569]">
-                            Subtotal:{" "}
-                            <FinancialNumeral
-                                amount={revision.summary.subtotal}
-                                variant="metadata"
-                            />
-                        </p>
-                    </CardContent>
-                </Card>
+            {/* Customer Context Card */}
+            <CustomerContextCard customer={quotation.customer} />
 
-                {/* 2. Order Discount */}
-                <Card>
-                    <CardContent className="p-4 space-y-1">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                            Order Discount
-                        </span>
-                        <div>
-                            <FinancialNumeral
-                                rate={revision.orderDiscountPercent}
-                                type="percentage"
-                                variant="heading"
-                                className="text-[#0F172A]"
-                            />
-                        </div>
-                        <p className="text-[11px] leading-4 text-[#475569]">
-                            Amount:{" "}
-                            <FinancialNumeral
-                                amount={revision.summary.orderDiscount}
-                                variant="metadata"
-                            />
-                        </p>
-                    </CardContent>
-                </Card>
-
-                {/* 3. Blended Margin */}
-                <Card>
-                    <CardContent className="p-4 space-y-1">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                            Blended Margin
-                        </span>
-                        <div>
-                            <FinancialNumeral
-                                rate={revision.summary.marginPercent}
-                                type="percentage"
-                                variant="heading"
-                                className="text-[#0F172A]"
-                            />
-                        </div>
-                        <p className="text-[11px] leading-4 text-[#475569]">
-                            Margin Yield:{" "}
-                            <FinancialNumeral
-                                amount={revision.summary.margin}
-                                variant="metadata"
-                            />
-                        </p>
-                    </CardContent>
-                </Card>
-
-                {/* 4. Customer Account */}
-                <Card>
-                    <CardContent className="p-4 space-y-1">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#64748B]">
-                            Customer Account
-                        </span>
-                        <div className="text-[16px] leading-[22px] font-semibold text-[#0F172A] truncate">
-                            {customer.name}
-                        </div>
-                        <p className="text-[11px] leading-4 text-[#475569]">
-                            Tier: {customer.customerTier ? `${customer.customerTier} Tier` : "Standard"}
-                        </p>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Account & Revision Metadata Strip */}
-            <Card>
-                <CardContent className="p-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-[12px]">
-                        <div>
-                            <span className="block text-[#64748B] font-medium mb-0.5">
-                                Customer Contact
-                            </span>
-                            <div className="flex items-center gap-1.5 font-medium text-[#0F172A]">
-                                <Building2 className="w-3.5 h-3.5 text-[#94A3B8]" />
-                                <span className="truncate">{customer.name}</span>
-                            </div>
-                        </div>
-
-                        <div>
-                            <span className="block text-[#64748B] font-medium mb-0.5">
-                                Active Revision
-                            </span>
-                            <div className="flex items-center gap-1.5 font-medium text-[#0F172A]">
-                                <Layers className="w-3.5 h-3.5 text-[#94A3B8]" />
-                                <span>
-                                    Revision {revision.revisionNumber} ({revision.status})
+            {/* Main Deal Workspace Layout (2 columns: Lines Table vs Sidebar) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left Column: Line Items Table */}
+                <div className="lg:col-span-2 space-y-4">
+                    <Card className="border-[#E2E8F0]">
+                        <CardHeader className="pb-3 border-b border-[#F1F5F9] flex flex-row items-center justify-between">
+                            <div>
+                                <CardTitle className="text-[14px] font-semibold text-[#0F172A] flex items-center gap-2">
+                                    <Package className="w-4 h-4 text-[#64748B]" />
+                                    Quotation Line Items
+                                </CardTitle>
+                                <span className="text-[11px] text-[#64748B]">
+                                    {displayLines.length} item{displayLines.length !== 1 ? "s" : ""} in revision {currentRevision.revisionNumber}
+                                    {isPreviewLoading && " • Recalculating preview..."}
                                 </span>
                             </div>
-                        </div>
 
-                        <div>
-                            <span className="block text-[#64748B] font-medium mb-0.5">
-                                Deal Lifecycle
-                            </span>
-                            <div>
-                                <StatusBadge type="quotation" status={quotation.status} size="sm" />
-                            </div>
-                        </div>
+                            {isDraft && canManageQuotation && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    leftIcon={<Plus className="w-3.5 h-3.5" />}
+                                    onClick={() => setIsAddLineModalOpen(true)}
+                                >
+                                    Add Product
+                                </Button>
+                            )}
+                        </CardHeader>
 
-                        <div>
-                            <span className="block text-[#64748B] font-medium mb-0.5">
-                                Line Item Total
-                            </span>
-                            <span className="font-semibold text-[#0F172A] tabular-nums">
-                                {lines.length} {lines.length === 1 ? "item" : "items"}
-                            </span>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Revision Lines Table */}
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle>Quotation Line Items</CardTitle>
-                            <CardDescription>
-                                Catalog items, approved unit pricing, line discounts, and margin yield for Revision {revision.revisionNumber}.
-                            </CardDescription>
-                        </div>
-                        <span className="text-[12px] text-[#64748B] tabular-nums">
-                            {lines.length} total {lines.length === 1 ? "line" : "lines"}
-                        </span>
-                    </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                    {lines.length === 0 ? (
-                        <EmptyState
-                            icon={<FileText className="w-6 h-6 text-[#94A3B8]" />}
-                            title="No line items in this revision yet"
-                            description="This draft quotation has no products added yet. Interactive line editing and catalog selection will be unlocked in the Quotation Builder (Phase 4)."
-                            className="border-none rounded-none py-12"
-                        />
-                    ) : (
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-[60px]">#</TableHead>
-                                    <TableHead>Product / Description</TableHead>
-                                    <TableHead className="w-[120px]">SKU</TableHead>
-                                    <TableHead className="w-[110px]">Category</TableHead>
-                                    <TableHead align="right" className="w-[90px]">Qty</TableHead>
-                                    <TableHead align="right" className="w-[120px]">Unit Price</TableHead>
-                                    <TableHead align="right" className="w-[100px]">Discount</TableHead>
-                                    <TableHead align="right" className="w-[130px]">Net Total</TableHead>
-                                    <TableHead align="right" className="w-[100px]">Margin</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {lines.map((line) => (
-                                    <TableRow key={line.lineNumber}>
-                                        <TableCell className="font-medium text-[#64748B] tabular-nums">
-                                            {line.lineNumber}
-                                        </TableCell>
-                                        <TableCell className="font-medium text-[#0F172A]">
-                                            {line.name}
-                                        </TableCell>
-                                        <TableCell className="text-[#64748B] font-mono text-[11px]">
-                                            {line.sku || "—"}
-                                        </TableCell>
-                                        <TableCell className="text-[#475569]">
-                                            {line.category}
-                                        </TableCell>
-                                        <TableCell align="right" isNumeric>
-                                            {line.quantity}
-                                        </TableCell>
-                                        <TableCell align="right" isNumeric>
-                                            <FinancialNumeral amount={line.unitPrice} />
-                                        </TableCell>
-                                        <TableCell align="right" isNumeric>
-                                            <FinancialNumeral
-                                                rate={line.discountPercent}
-                                                type="percentage"
-                                                coloredDelta={line.discountPercent > 0}
-                                            />
-                                        </TableCell>
-                                        <TableCell align="right" isNumeric className="font-semibold">
-                                            <FinancialNumeral amount={line.lineTotal} />
-                                        </TableCell>
-                                        <TableCell align="right" isNumeric>
-                                            <FinancialNumeral
-                                                rate={line.marginPercent}
-                                                type="percentage"
-                                            />
-                                        </TableCell>
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead className="w-[50px]">#</TableHead>
+                                        <TableHead className="min-w-[200px]">Product / SKU</TableHead>
+                                        <TableHead className="w-[85px]">Quantity</TableHead>
+                                        <TableHead className="w-[110px] text-right">Unit Price</TableHead>
+                                        <TableHead className="w-[110px] text-right">Discount</TableHead>
+                                        <TableHead className="w-[110px] text-right">Line Total</TableHead>
+                                        <TableHead className="w-[85px] text-right">Margin</TableHead>
+                                        {isDraft && canManageQuotation && (
+                                            <TableHead className="w-[45px] text-right" />
+                                        )}
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                            <TableFooter>
-                                <TableRow>
-                                    <TableCell colSpan={7} className="text-right font-semibold">
-                                        Revision Total
-                                    </TableCell>
-                                    <TableCell align="right" isNumeric className="font-bold text-[#1E40AF]">
-                                        <FinancialNumeral
-                                            amount={revision.summary.total}
-                                            variant="subtotal"
-                                        />
-                                    </TableCell>
-                                    <TableCell align="right" isNumeric className="font-semibold">
-                                        <FinancialNumeral
-                                            rate={revision.summary.marginPercent}
-                                            type="percentage"
-                                        />
-                                    </TableCell>
-                                </TableRow>
-                            </TableFooter>
-                        </Table>
-                    )}
-                </CardContent>
-            </Card>
+                                </TableHeader>
+                                <TableBody>
+                                    {displayLines.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell
+                                                colSpan={isDraft && canManageQuotation ? 8 : 7}
+                                                className="py-12 text-center"
+                                            >
+                                                <EmptyState
+                                                    icon={<Package className="w-9 h-9 text-[#94A3B8]" />}
+                                                    title="No products added yet"
+                                                    description="Add products or services from the catalog to configure commercial pricing, quantities, and discounts."
+                                                    action={
+                                                        isDraft && canManageQuotation ? (
+                                                            <Button
+                                                                variant="primary"
+                                                                size="sm"
+                                                                leftIcon={<Plus className="w-3.5 h-3.5" />}
+                                                                onClick={() => setIsAddLineModalOpen(true)}
+                                                            >
+                                                                Add First Product
+                                                            </Button>
+                                                        ) : undefined
+                                                    }
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : (
+                                        displayLines.map((line) => {
+                                            const hasLineGovernanceWarning =
+                                                line.evaluation &&
+                                                line.evaluation.status !== "WITHIN_LIMIT";
 
-            {/* Clean, Lightweight Context Notice */}
-            <div className="flex items-center gap-2.5 p-3 rounded-md bg-[#F8FAFC] border border-[#E2E8F0] text-[12px] leading-4 text-[#64748B]">
-                <Info className="w-4 h-4 shrink-0 text-[#94A3B8]" />
-                <span>
-                    Quotation Detail View • Revision {revision.revisionNumber} is currently in{" "}
-                    <strong className="text-[#0F172A]">{revision.status}</strong> state. Interactive line item editing and deal workspace operations will activate in Phase 4.
-                </span>
+                                            return (
+                                                <TableRow key={line.lineNumber} className="hover:bg-[#F8FAFC]">
+                                                    {/* Line Number */}
+                                                    <TableCell className="font-mono text-[11px] text-[#64748B]">
+                                                        {line.lineNumber}
+                                                    </TableCell>
+
+                                                    {/* Product Name & SKU */}
+                                                    <TableCell>
+                                                        <div className="min-w-0">
+                                                            <span className="font-medium text-[13px] text-[#0F172A] block truncate">
+                                                                {line.name}
+                                                            </span>
+                                                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[#64748B]">
+                                                                <span className="truncate">{line.category}</span>
+                                                                {line.sku && (
+                                                                    <>
+                                                                        <span>•</span>
+                                                                        <code className="font-mono bg-[#F1F5F9] px-1.5 py-0.5 rounded text-[#475569]">
+                                                                            {line.sku}
+                                                                        </code>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </TableCell>
+
+                                                    {/* Quantity */}
+                                                    <TableCell>
+                                                        {isDraft && canManageQuotation ? (
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                step="1"
+                                                                value={line.quantity}
+                                                                onChange={(e) =>
+                                                                    handleQuantityChange(
+                                                                        line.lineNumber,
+                                                                        e.target.value
+                                                                    )
+                                                                }
+                                                                className="w-16 h-7 text-[12px] text-right font-medium rounded border border-[#CBD5E1] px-1.5 focus:outline-none focus:ring-1 focus:ring-[#1E40AF] tabular-nums"
+                                                            />
+                                                        ) : (
+                                                            <span className="text-[12px] font-medium text-[#0F172A] tabular-nums">
+                                                                {line.quantity}
+                                                            </span>
+                                                        )}
+                                                    </TableCell>
+
+                                                    {/* Unit Price */}
+                                                    <TableCell className="text-right">
+                                                        <FinancialNumeral
+                                                            amount={line.unitPrice}
+                                                            variant="body"
+                                                        />
+                                                    </TableCell>
+
+                                                    {/* Discount % with Line Governance Alert */}
+                                                    <TableCell className="text-right">
+                                                        {isDraft && canManageQuotation ? (
+                                                            <div className="flex flex-col items-end">
+                                                                <div className="flex items-center justify-end gap-1">
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        max="100"
+                                                                        step="0.5"
+                                                                        value={line.discountPercent}
+                                                                        onChange={(e) =>
+                                                                            handleDiscountChange(
+                                                                                line.lineNumber,
+                                                                                e.target.value
+                                                                            )
+                                                                        }
+                                                                        className="w-16 h-7 text-[12px] text-right font-medium rounded border border-[#CBD5E1] px-1.5 focus:outline-none focus:ring-1 focus:ring-[#1E40AF] tabular-nums"
+                                                                    />
+                                                                    <span className="text-[11px] text-[#64748B]">%</span>
+                                                                </div>
+                                                                {hasLineGovernanceWarning && (
+                                                                    <span
+                                                                        className="text-[10px] text-[#B45309] font-medium mt-1 text-right max-w-[140px] leading-tight"
+                                                                        title={line.evaluation?.message || "Approval required"}
+                                                                    >
+                                                                        ⚠ {line.evaluation?.approvalLevel === "FINANCE_OPERATIONS" ? "Finance" : "Manager"} approval
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-right">
+                                                                <span className="text-[12px] tabular-nums text-[#0F172A]">
+                                                                    {line.discountPercent}%
+                                                                </span>
+                                                                {hasLineGovernanceWarning && (
+                                                                    <span className="text-[10px] text-[#B45309] block">
+                                                                        Approval req.
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </TableCell>
+
+                                                    {/* Line Total */}
+                                                    <TableCell className="text-right">
+                                                        <FinancialNumeral
+                                                            amount={line.lineTotal}
+                                                            variant="subtotal"
+                                                        />
+                                                    </TableCell>
+
+                                                    {/* Margin % */}
+                                                    <TableCell className="text-right">
+                                                        <span
+                                                            className={`text-[12px] font-medium tabular-nums ${
+                                                                line.margin < 0
+                                                                    ? "text-[#B91C1C]"
+                                                                    : line.marginPercent < 20
+                                                                    ? "text-[#B45309]"
+                                                                    : "text-[#047857]"
+                                                            }`}
+                                                        >
+                                                            {line.marginPercent.toFixed(1)}%
+                                                        </span>
+                                                    </TableCell>
+
+                                                    {/* Actions (Draft Delete) */}
+                                                    {isDraft && canManageQuotation && (
+                                                        <TableCell className="text-right">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveLine(line.lineNumber)}
+                                                                className="text-[#94A3B8] hover:text-[#B91C1C] transition-colors p-1 rounded hover:bg-[#FEF2F2]"
+                                                                title="Remove line item"
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </TableCell>
+                                                    )}
+                                                </TableRow>
+                                            );
+                                        })
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </Card>
+                </div>
+
+                {/* Right Column: Commercial Summary & Governance Panels */}
+                <div className="space-y-4">
+                    <CommercialSummaryCard
+                        summary={currentSummary}
+                        orderDiscountPercent={orderDiscountPercent}
+                        onOrderDiscountChange={handleOrderDiscountChange}
+                        isReadOnly={!isDraft || !canManageQuotation}
+                    />
+
+                    <GovernancePanel evaluation={currentEvaluation} />
+                </div>
             </div>
+
+            {/* Add Line Item Modal */}
+            <AddLineModal
+                isOpen={isAddLineModalOpen}
+                onClose={() => setIsAddLineModalOpen(false)}
+                onAddLine={handleAddLine}
+            />
         </div>
     );
 }
