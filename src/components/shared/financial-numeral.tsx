@@ -4,6 +4,7 @@ import { cn } from "@/lib/cn";
 
 export interface FinancialNumeralProps extends React.HTMLAttributes<HTMLSpanElement> {
     amount?: number | string | null;
+    value?: number | string | null;
     rate?: number | string | null;
     currency?: string;
     variant?: "display" | "heading" | "subtotal" | "body" | "metadata";
@@ -15,6 +16,7 @@ export interface FinancialNumeralProps extends React.HTMLAttributes<HTMLSpanElem
 
 export function FinancialNumeral({
     amount,
+    value,
     rate,
     currency = "INR",
     variant = "body",
@@ -25,17 +27,18 @@ export function FinancialNumeral({
     className,
     ...props
 }: FinancialNumeralProps) {
+    const rawValue = amount ?? value;
     let formattedText: string;
 
     if (type === "percentage") {
-        formattedText = formatPercentage(rate ?? amount);
+        formattedText = formatPercentage(rate ?? rawValue);
     } else if (type === "quantity") {
-        formattedText = amount !== undefined && amount !== null ? String(amount) : "—";
+        formattedText = rawValue !== undefined && rawValue !== null ? String(rawValue) : "—";
     } else {
-        formattedText = formatCurrency(amount, currency);
+        formattedText = formatCurrency(rawValue, currency);
     }
 
-    const numericValue = typeof amount === "number" ? amount : typeof amount === "string" ? parseFloat(amount) : 0;
+    const numericValue = typeof rawValue === "number" ? rawValue : typeof rawValue === "string" ? parseFloat(rawValue) : 0;
 
     return (
         <span

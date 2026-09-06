@@ -107,6 +107,17 @@ export const BILLING_STATUS_META: Record<
 };
 
 // ==========================================
+// Subscription Status UI Metadata
+// ==========================================
+export const SUBSCRIPTION_STATUS_META: Record<
+    string,
+    { label: string; variant: StatusVariant }
+> = {
+    ACTIVE: { label: "Active", variant: "success" },
+    CANCELLED: { label: "Cancelled", variant: "neutral" },
+};
+
+// ==========================================
 // Approval Status UI Metadata
 // ==========================================
 export const APPROVAL_STATUS_META: Record<
@@ -186,6 +197,35 @@ export const WAREHOUSE_READ_ROLES: ("ADMIN" | "SALES_MANAGER" | "SALES_REP" | "F
 export const WAREHOUSE_MANAGE_ROLES: ("ADMIN" | "FINANCE_OPERATIONS")[] = [
     "ADMIN",
     "FINANCE_OPERATIONS",
+];
+
+export const BILLING_GENERATE_ROLES: ("ADMIN" | "FINANCE_OPERATIONS" | "SALES_MANAGER")[] = [
+    "ADMIN",
+    "FINANCE_OPERATIONS",
+    "SALES_MANAGER",
+];
+
+export const INVOICE_READ_ROLES: ("ADMIN" | "FINANCE_OPERATIONS" | "SALES_MANAGER" | "SALES_REP" | "CUSTOMER")[] = [
+    "ADMIN",
+    "FINANCE_OPERATIONS",
+    "SALES_MANAGER",
+    "SALES_REP",
+    "CUSTOMER",
+];
+
+export const INVOICE_PAY_ROLES: ("ADMIN" | "FINANCE_OPERATIONS" | "SALES_MANAGER" | "CUSTOMER")[] = [
+    "ADMIN",
+    "FINANCE_OPERATIONS",
+    "SALES_MANAGER",
+    "CUSTOMER",
+];
+
+export const SUBSCRIPTION_READ_ROLES: ("ADMIN" | "FINANCE_OPERATIONS" | "SALES_MANAGER" | "SALES_REP" | "CUSTOMER")[] = [
+    "ADMIN",
+    "FINANCE_OPERATIONS",
+    "SALES_MANAGER",
+    "SALES_REP",
+    "CUSTOMER",
 ];
 
 export const APPROVAL_LEVEL_META: Record<string, { label: string; roles: string[] }> = {

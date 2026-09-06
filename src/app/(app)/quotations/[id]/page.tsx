@@ -32,13 +32,19 @@ import { apiClient } from "@/lib/api-client";
 import { API_ROUTES } from "@/config/api";
 import { useAuth } from "@/context/auth-context";
 import { useToast } from "@/context/toast-context";
-import { QUOTATION_MANAGE_ROLES, FULFILLMENT_CREATE_ROLES } from "@/lib/constants";
+import {
+    QUOTATION_MANAGE_ROLES,
+    FULFILLMENT_CREATE_ROLES,
+    BILLING_GENERATE_ROLES,
+} from "@/lib/constants";
 import {
     AlertCircle,
     ArrowLeft,
     Check,
     Package,
     Plus,
+    Receipt,
+    Repeat,
     Save,
     Send,
     Trash2,
@@ -54,6 +60,13 @@ import type {
     FulfillmentListResponse,
     FulfillmentSummaryResponse,
 } from "@/server/modules/fulfillment/fulfillment.types";
+import type {
+    InvoiceListResponse,
+    InvoiceSummaryResponse,
+    SubscriptionListResponse,
+    SubscriptionSummaryResponse,
+    GenerateBillingResponse,
+} from "@/server/modules/billing/billing.types";
 
 interface QuotationDetailPageProps {
     params: Promise<{ id: string }>;
@@ -75,6 +88,11 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
     // Fulfillment State
     const [existingFulfillment, setExistingFulfillment] = useState<FulfillmentSummaryResponse | null>(null);
     const [isCreatingFulfillment, setIsCreatingFulfillment] = useState<boolean>(false);
+
+    // Billing & Subscription State
+    const [existingInvoice, setExistingInvoice] = useState<InvoiceSummaryResponse | null>(null);
+    const [existingSubscriptions, setExistingSubscriptions] = useState<SubscriptionSummaryResponse[]>([]);
+    const [isGeneratingBilling, setIsGeneratingBilling] = useState<boolean>(false);
 
     // Editable Draft State
     const [draftLines, setDraftLines] = useState<QuotationLineResponse[]>([]);
@@ -102,6 +120,8 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
         currentUser && QUOTATION_MANAGE_ROLES.includes(currentUser.role);
     const canCreateFulfillment =
         Boolean(currentUser && (FULFILLMENT_CREATE_ROLES as readonly string[]).includes(currentUser.role));
+    const canGenerateBilling =
+        Boolean(currentUser && (BILLING_GENERATE_ROLES as readonly string[]).includes(currentUser.role));
 
     // Warn on tab close / reload if there are unsaved modifications
     useEffect(() => {
@@ -134,7 +154,7 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
                     setErrorMessage(null);
                     setIsLoading(false);
 
-                    // If Confirmed: fetch existing fulfillment for UX button optimization
+                    // If Confirmed: fetch existing fulfillment, invoice, and subscriptions for UX button optimization
                     if (data.status === "CONFIRMED") {
                         apiClient
                             .get<FulfillmentListResponse>(API_ROUTES.FULFILLMENTS.LIST, {
@@ -143,6 +163,28 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
                             .then((fRes) => {
                                 if (isMounted && fRes.fulfillments && fRes.fulfillments.length > 0) {
                                     setExistingFulfillment(fRes.fulfillments[0]);
+                                }
+                            })
+                            .catch(() => {});
+
+                        apiClient
+                            .get<InvoiceListResponse>(API_ROUTES.INVOICES.LIST, {
+                                params: { quotationId: id },
+                            })
+                            .then((iRes) => {
+                                if (isMounted && iRes.invoices && iRes.invoices.length > 0) {
+                                    setExistingInvoice(iRes.invoices[0]);
+                                }
+                            })
+                            .catch(() => {});
+
+                        apiClient
+                            .get<SubscriptionListResponse>(API_ROUTES.SUBSCRIPTIONS.LIST, {
+                                params: { quotationId: id },
+                            })
+                            .then((sRes) => {
+                                if (isMounted && sRes.subscriptions && sRes.subscriptions.length > 0) {
+                                    setExistingSubscriptions(sRes.subscriptions);
                                 }
                             })
                             .catch(() => {});
@@ -460,6 +502,75 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
         }
     };
 
+    // Domain Action: Generate Billing (POST /api/billing)
+    const handleGenerateBilling = async () => {
+        setIsGeneratingBilling(true);
+
+        try {
+            const res = await apiClient.post<GenerateBillingResponse>(
+                API_ROUTES.BILLING.GENERATE,
+                { quotationId: id }
+            );
+
+            const hasInvoice = Boolean(res.invoice);
+            const hasSubs = Boolean(res.subscriptions && res.subscriptions.length > 0);
+
+            if (hasInvoice && hasSubs) {
+                toast.success(
+                    "Billing Generated",
+                    `Created Invoice ${res.invoice?.invoiceNumber} and ${res.subscriptions.length} recurring subscription(s).`
+                );
+                router.push(`/billing/${res.invoice?.id}`);
+            } else if (hasInvoice && res.invoice) {
+                toast.success(
+                    "Invoice Generated",
+                    `Created Invoice ${res.invoice.invoiceNumber}.`
+                );
+                router.push(`/billing/${res.invoice.id}`);
+            } else if (hasSubs && res.subscriptions[0]) {
+                toast.success(
+                    "Subscription Generated",
+                    `Created recurring subscription ${res.subscriptions[0].subscriptionNumber}.`
+                );
+                router.push(`/subscriptions/${res.subscriptions[0].id}`);
+            } else {
+                toast.success("Billing Processed", "Billing generated successfully.");
+            }
+        } catch (err: unknown) {
+            const msg =
+                err instanceof Error ? err.message : "Failed to generate billing.";
+
+            // Handle 409 Conflict: refresh existing billing records and route to invoice if available
+            if (
+                msg.toLowerCase().includes("already") ||
+                (err as { status?: number })?.status === 409
+            ) {
+                try {
+                    const existingList = await apiClient.get<InvoiceListResponse>(
+                        API_ROUTES.INVOICES.LIST,
+                        { params: { quotationId: id } }
+                    );
+                    if (existingList.invoices && existingList.invoices.length > 0) {
+                        const existing = existingList.invoices[0];
+                        setExistingInvoice(existing);
+                        toast.info(
+                            "Billing Exists",
+                            `Billing already generated (${existing.invoiceNumber}). Opening invoice...`
+                        );
+                        router.push(`/billing/${existing.id}`);
+                        return;
+                    }
+                } catch {
+                    // Fall through
+                }
+            }
+
+            toast.error("Billing Generation Failed", msg);
+        } finally {
+            setIsGeneratingBilling(false);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="space-y-6">
@@ -610,28 +721,63 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
                     )}
 
                     {quotation.status === "CONFIRMED" && (
-                        existingFulfillment ? (
-                            <Link href={`/fulfillment/${existingFulfillment.id}`}>
+                        <>
+                            {existingInvoice ? (
+                                <Link href={`/billing/${existingInvoice.id}`}>
+                                    <Button
+                                        variant="outline"
+                                        size="default"
+                                        leftIcon={<Receipt className="w-4 h-4" />}
+                                    >
+                                        View Invoice ({existingInvoice.invoiceNumber})
+                                    </Button>
+                                </Link>
+                            ) : existingSubscriptions.length > 0 ? (
+                                <Link href={`/subscriptions/${existingSubscriptions[0].id}`}>
+                                    <Button
+                                        variant="outline"
+                                        size="default"
+                                        leftIcon={<Repeat className="w-4 h-4" />}
+                                    >
+                                        View Subscription ({existingSubscriptions[0].subscriptionNumber})
+                                    </Button>
+                                </Link>
+                            ) : canGenerateBilling ? (
+                                <Button
+                                    variant="outline"
+                                    size="default"
+                                    leftIcon={<Receipt className="w-4 h-4" />}
+                                    isLoading={isGeneratingBilling}
+                                    disabled={isGeneratingBilling}
+                                    onClick={handleGenerateBilling}
+                                >
+                                    Generate Billing
+                                </Button>
+                            ) : null}
+
+                            {existingFulfillment ? (
+                                <Link href={`/fulfillment/${existingFulfillment.id}`}>
+                                    <Button
+                                        variant="primary"
+                                        size="default"
+                                        leftIcon={<Truck className="w-4 h-4" />}
+                                    >
+                                        View Fulfillment ({existingFulfillment.fulfillmentNumber})
+                                    </Button>
+                                </Link>
+                            ) : canCreateFulfillment ? (
                                 <Button
                                     variant="primary"
                                     size="default"
                                     leftIcon={<Truck className="w-4 h-4" />}
+                                    isLoading={isCreatingFulfillment}
+                                    disabled={isCreatingFulfillment}
+                                    onClick={handleCreateFulfillment}
                                 >
-                                    View Fulfillment ({existingFulfillment.fulfillmentNumber})
+                                    Create Fulfillment
                                 </Button>
-                            </Link>
-                        ) : canCreateFulfillment ? (
-                            <Button
-                                variant="primary"
-                                size="default"
-                                leftIcon={<Truck className="w-4 h-4" />}
-                                isLoading={isCreatingFulfillment}
-                                disabled={isCreatingFulfillment}
-                                onClick={handleCreateFulfillment}
-                            >
-                                Create Fulfillment
-                            </Button>
-                        ) : null
+                            ) : null}
+                        </>
                     )}
                 </div>
             </div>

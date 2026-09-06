@@ -3,6 +3,7 @@
 import React, { use, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { FinancialNumeral } from "@/components/shared/financial-numeral";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,7 @@ import { NegotiationComposer } from "@/components/portal/negotiation-composer";
 import { NegotiationPreviewCard } from "@/components/portal/negotiation-preview-card";
 import { ChangeRequestModal } from "@/components/portal/change-request-modal";
 import { QuotationConfirmModal } from "@/components/portal/quotation-confirm-modal";
+import { PaymentModal } from "@/components/billing/payment-modal";
 import { apiClient, ApiClientError } from "@/lib/api-client";
 import { API_ROUTES } from "@/config/api";
 import { useToast } from "@/context/toast-context";
@@ -22,9 +24,16 @@ import {
     Clock,
     AlertCircle,
     ChevronLeft,
+    CreditCard,
+    Receipt,
     SlidersHorizontal,
     FileText,
 } from "lucide-react";
+import type {
+    InvoiceListResponse,
+    InvoiceSummaryResponse,
+    InvoiceResponse,
+} from "@/server/modules/billing/billing.types";
 import type {
     CreateChangeRequestInput,
     PortalNegotiationHistoryResponse,
@@ -69,6 +78,11 @@ export default function CustomerQuotationDetailPage({
     const [isConfirming, setIsConfirming] = useState<boolean>(false);
     const [confirmError, setConfirmError] = useState<string | null>(null);
 
+    // Billing & Invoice State
+    const [customerInvoice, setCustomerInvoice] = useState<InvoiceSummaryResponse | null>(null);
+    const [isPayModalOpen, setIsPayModalOpen] = useState<boolean>(false);
+    const [isPayingInvoice, setIsPayingInvoice] = useState<boolean>(false);
+
     const refreshData = useCallback(() => {
         setRefreshTrigger((prev) => prev + 1);
     }, []);
@@ -93,6 +107,20 @@ export default function CustomerQuotationDetailPage({
                     setNegotiation(negRes);
                     setErrorMessage(null);
                     setIsLoading(false);
+
+                    // If Confirmed, authoritatively fetch customer-scoped invoice
+                    if (quoteRes.status === "CONFIRMED") {
+                        apiClient
+                            .get<InvoiceListResponse>(API_ROUTES.INVOICES.LIST, {
+                                params: { quotationId: id },
+                            })
+                            .then((invRes) => {
+                                if (isMounted && invRes.invoices && invRes.invoices.length > 0) {
+                                    setCustomerInvoice(invRes.invoices[0]);
+                                }
+                            })
+                            .catch(() => {});
+                    }
                 }
             } catch (err: unknown) {
                 if (isMounted) {
@@ -265,6 +293,27 @@ export default function CustomerQuotationDetailPage({
             toast.error("Confirmation Error", msg);
         } finally {
             setIsConfirming(false);
+        }
+    };
+
+    // Handle Customer Invoice Payment
+    const handlePayCustomerInvoice = async () => {
+        if (!customerInvoice) return;
+        setIsPayingInvoice(true);
+
+        try {
+            await apiClient.post<InvoiceResponse>(
+                API_ROUTES.INVOICES.PAY(customerInvoice.id),
+                {}
+            );
+            toast.success("Payment Received", "Your invoice payment has been successfully recorded.");
+            setIsPayModalOpen(false);
+            refreshData();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : "Failed to record invoice payment.";
+            toast.error("Payment Failed", msg);
+        } finally {
+            setIsPayingInvoice(false);
         }
     };
 
@@ -576,6 +625,40 @@ export default function CustomerQuotationDetailPage({
                             </CardContent>
                         </Card>
                     )}
+
+                    {/* Customer Invoice Card when confirmed */}
+                    {quotation.status === "CONFIRMED" && customerInvoice && (
+                        <div className="p-4 rounded-lg bg-white border border-[#E2E8F0] shadow-2xs space-y-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Receipt className="w-4 h-4 text-[#1E40AF]" />
+                                    <span className="font-bold text-[13px] text-[#0F172A]">
+                                        Invoice {customerInvoice.invoiceNumber}
+                                    </span>
+                                </div>
+                                <StatusBadge type="billing" status={customerInvoice.status} size="sm" />
+                            </div>
+
+                            <div className="flex justify-between text-[13px] pt-1">
+                                <span className="text-[#64748B]">Total Amount</span>
+                                <span className="font-bold text-[#0F172A]">
+                                    <FinancialNumeral value={customerInvoice.total} />
+                                </span>
+                            </div>
+
+                            {customerInvoice.status === "PENDING" && (
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    className="w-full text-[12px] bg-[#1E40AF] hover:bg-[#1D4ED8]"
+                                    leftIcon={<CreditCard className="w-3.5 h-3.5" />}
+                                    onClick={() => setIsPayModalOpen(true)}
+                                >
+                                    Pay Invoice Now
+                                </Button>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -603,6 +686,19 @@ export default function CustomerQuotationDetailPage({
                 error={confirmError}
                 onConfirm={handleConfirmQuotation}
             />
+
+            {/* Customer Invoice Payment Modal */}
+            {isPayModalOpen && customerInvoice && (
+                <PaymentModal
+                    isOpen={isPayModalOpen}
+                    onClose={() => setIsPayModalOpen(false)}
+                    invoiceNumber={customerInvoice.invoiceNumber}
+                    customerName={customerInvoice.customerName || "Your Account"}
+                    total={customerInvoice.total}
+                    isPaying={isPayingInvoice}
+                    onConfirmPayment={handlePayCustomerInvoice}
+                />
+            )}
         </div>
     );
 }

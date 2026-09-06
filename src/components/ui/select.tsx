@@ -2,13 +2,19 @@ import React, { forwardRef } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/cn";
 
+export interface SelectOption {
+    value: string | number;
+    label: string;
+}
+
 export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
     error?: string | boolean;
     helperText?: string;
+    options?: SelectOption[];
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-    ({ className, children, error, helperText, disabled, id, ...props }, ref) => {
+    ({ className, children, error, helperText, disabled, id, options, ...props }, ref) => {
         return (
             <div className="w-full">
                 <div
@@ -30,7 +36,13 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
                         )}
                         {...props}
                     >
-                        {children}
+                        {options
+                            ? options.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                  </option>
+                              ))
+                            : children}
                     </select>
                     <ChevronDown className="absolute right-2.5 w-4 h-4 text-[#94A3B8] pointer-events-none" />
                 </div>

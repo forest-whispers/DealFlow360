@@ -23,8 +23,13 @@ import {
     GitFork,
     RotateCw,
     Truck,
+    Receipt,
 } from "lucide-react";
 import type { CanonicalFulfillmentResponse } from "@/server/modules/fulfillment/fulfillment.types";
+import type {
+    InvoiceListResponse,
+    InvoiceSummaryResponse,
+} from "@/server/modules/billing/billing.types";
 
 interface FulfillmentDetailPageProps {
     params: Promise<{ id: string }>;
@@ -37,6 +42,7 @@ export default function FulfillmentDetailPage({ params }: FulfillmentDetailPageP
     const [fulfillment, setFulfillment] = useState<CanonicalFulfillmentResponse | null>(
         null
     );
+    const [existingInvoice, setExistingInvoice] = useState<InvoiceSummaryResponse | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
@@ -53,6 +59,20 @@ export default function FulfillmentDetailPage({ params }: FulfillmentDetailPageP
                 );
                 if (isMounted) {
                     setFulfillment(res);
+
+                    // Authoritative lookup for quotation's invoice
+                    if (res.quotationId) {
+                        apiClient
+                            .get<InvoiceListResponse>(API_ROUTES.INVOICES.LIST, {
+                                params: { quotationId: res.quotationId },
+                            })
+                            .then((invRes) => {
+                                if (isMounted && invRes.invoices && invRes.invoices.length > 0) {
+                                    setExistingInvoice(invRes.invoices[0]);
+                                }
+                            })
+                            .catch(() => {});
+                    }
                 }
             } catch (err: unknown) {
                 if (isMounted) {
@@ -173,6 +193,17 @@ export default function FulfillmentDetailPage({ params }: FulfillmentDetailPageP
                                 View Quotation {fulfillment.quotationNumber}
                             </Button>
                         </Link>
+                        {existingInvoice && (
+                            <Link href={`/billing/${existingInvoice.id}`}>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    leftIcon={<Receipt className="w-3.5 h-3.5" />}
+                                >
+                                    View Invoice ({existingInvoice.invoiceNumber})
+                                </Button>
+                            </Link>
+                        )}
                     </div>
                 </div>
 
