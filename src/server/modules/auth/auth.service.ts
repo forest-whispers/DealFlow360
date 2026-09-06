@@ -8,6 +8,7 @@ import {
 } from "@/server/shared/errors/errors";
 
 import { setSessionCookie, getSessionPayload } from "./auth.session";
+import { discountGovernanceService } from "@/server/modules/discount-governance/discount-governance.service";
 
 import type {
     AuthenticatedUser,
@@ -116,6 +117,10 @@ export class AuthService {
                     "Unable to create the organization owner.",
                 );
             }
+
+            await discountGovernanceService.ensureDefaultGovernance(
+                organization.id,
+            );
 
             user = createdUser;
         }

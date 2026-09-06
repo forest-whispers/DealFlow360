@@ -19,6 +19,7 @@ import {
     DiscountApprovalLevel,
     EvaluationStatus,
 } from "@/server/modules/discount-governance/discount-governance.constants";
+import { discountGovernanceService } from "@/server/modules/discount-governance/discount-governance.service";
 import type {
     CanonicalLineEvaluationResult,
     DiscountLineContext,
@@ -28,12 +29,10 @@ import {
     calculateLineCommercials,
     calculateQuotationSummary,
     evaluateQuotationGovernance,
-    roundToTwo,
 } from "./quotation.calculation";
 import type {
     CanonicalQuotationResponse,
     CreateQuotationInput,
-    DraftLineInput,
     LinePreviewInput,
     LinePreviewResponse,
     ListQuotationsQuery,
@@ -97,17 +96,16 @@ export class QuotationService {
         categories: string[],
     ) {
         const uniqueCategories = Array.from(new Set(categories));
+        const effectiveTier = customerTier ?? CustomerTier.BRONZE;
 
-        const [tierRule, categoryRules, approvalPolicy] = await Promise.all([
-            customerTier
-                ? prisma.discountTierRule.findFirst({
-                      where: {
-                          organizationId,
-                          customerTier,
-                          isActive: true,
-                      },
-                  })
-                : null,
+        let [tierRule, categoryRules, approvalPolicy] = await Promise.all([
+            prisma.discountTierRule.findFirst({
+                where: {
+                    organizationId,
+                    customerTier: effectiveTier,
+                    isActive: true,
+                },
+            }),
             prisma.discountCategoryRule.findMany({
                 where: {
                     organizationId,
@@ -121,6 +119,32 @@ export class QuotationService {
                 },
             }),
         ]);
+
+        if (!approvalPolicy || (!tierRule && uniqueCategories.length === 0)) {
+            await discountGovernanceService.ensureDefaultGovernance(organizationId);
+
+            [tierRule, categoryRules, approvalPolicy] = await Promise.all([
+                prisma.discountTierRule.findFirst({
+                    where: {
+                        organizationId,
+                        customerTier: effectiveTier,
+                        isActive: true,
+                    },
+                }),
+                prisma.discountCategoryRule.findMany({
+                    where: {
+                        organizationId,
+                        category: { in: uniqueCategories },
+                        isActive: true,
+                    },
+                }),
+                prisma.discountApprovalPolicy.findUnique({
+                    where: {
+                        organizationId,
+                    },
+                }),
+            ]);
+        }
 
         if (!approvalPolicy) {
             throw new BadRequestError(

@@ -149,10 +149,10 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
                         lineNumber: l.lineNumber,
                         productId: l.productId,
                         variantId: l.variantId || null,
-                        quantity: l.quantity,
-                        discountPercent: l.discountPercent,
+                        quantity: Math.max(1, Math.round(Number(l.quantity) || 1)),
+                        discountPercent: Number(Number(l.discountPercent || 0).toFixed(2)),
                     })),
-                    orderDiscountPercent,
+                    orderDiscountPercent: Number(Number(orderDiscountPercent || 0).toFixed(2)),
                 };
 
                 const previewData = await apiClient.post<CanonicalQuotationResponse>(
@@ -164,7 +164,8 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
                     setPreviewQuotation(previewData);
                     setIsPreviewLoading(false);
                 }
-            } catch {
+            } catch (err) {
+                console.error("Quotation preview calculation failed:", err);
                 if (isMounted) {
                     setIsPreviewLoading(false);
                 }
@@ -262,10 +263,10 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
                     lineNumber: l.lineNumber,
                     productId: l.productId,
                     variantId: l.variantId || null,
-                    quantity: l.quantity,
-                    discountPercent: l.discountPercent,
+                    quantity: Math.max(1, Math.round(Number(l.quantity) || 1)),
+                    discountPercent: Number(Number(l.discountPercent || 0).toFixed(2)),
                 })),
-                orderDiscountPercent,
+                orderDiscountPercent: Number(Number(orderDiscountPercent || 0).toFixed(2)),
             };
 
             const savedQuotation = await apiClient.put<CanonicalQuotationResponse>(
@@ -439,7 +440,12 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
               const previewMatch = previewQuotation?.revision.lines.find(
                   (pl) => pl.lineNumber === draftLine.lineNumber
               );
-              return previewMatch ?? draftLine;
+              if (!previewMatch) return draftLine;
+              return {
+                  ...previewMatch,
+                  quantity: draftLine.quantity,
+                  discountPercent: draftLine.discountPercent,
+              };
           })
         : currentRevision.lines;
 

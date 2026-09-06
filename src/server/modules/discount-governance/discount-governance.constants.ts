@@ -1,4 +1,4 @@
-import { CustomerTier, UserRole } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 
 export const GOVERNANCE_CONFIG_ROLES: readonly UserRole[] = [
     UserRole.ADMIN,

@@ -1,4 +1,5 @@
 import {
+    CustomerTier,
     DiscountApprovalPolicy,
     DiscountCategoryRule,
     DiscountTierRule,
@@ -524,6 +525,48 @@ export class DiscountGovernanceService {
         };
 
         return evaluateLineDiscount(context, normalizedRules);
+    }
+
+    // ==========================================
+    // Organization Provisioning & Defaults
+    // ==========================================
+
+    async ensureDefaultGovernance(organizationId: string): Promise<void> {
+        await prisma.discountApprovalPolicy.upsert({
+            where: { organizationId },
+            create: {
+                organizationId,
+                salesManagerThreshold: new Prisma.Decimal(10),
+                financeOperationsThreshold: new Prisma.Decimal(20),
+            },
+            update: {},
+        });
+
+        const defaultTiers = [
+            { customerTier: CustomerTier.GOLD, maximumDiscountPercent: 30 },
+            { customerTier: CustomerTier.SILVER, maximumDiscountPercent: 20 },
+            { customerTier: CustomerTier.BRONZE, maximumDiscountPercent: 10 },
+        ];
+
+        for (const t of defaultTiers) {
+            await prisma.discountTierRule.upsert({
+                where: {
+                    organizationId_customerTier: {
+                        organizationId,
+                        customerTier: t.customerTier,
+                    },
+                },
+                create: {
+                    organizationId,
+                    customerTier: t.customerTier,
+                    maximumDiscountPercent: new Prisma.Decimal(
+                        t.maximumDiscountPercent,
+                    ),
+                    isActive: true,
+                },
+                update: {},
+            });
+        }
     }
 }
 
