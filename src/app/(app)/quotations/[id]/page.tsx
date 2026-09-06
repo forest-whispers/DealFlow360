@@ -24,6 +24,7 @@ import { CustomerNegotiationCard } from "@/components/quotations/customer-negoti
 import { CommercialSummaryCard } from "@/components/quotations/commercial-summary-card";
 import { GovernancePanel } from "@/components/quotations/governance-panel";
 import { DealLifecycleBanner } from "@/components/quotations/deal-lifecycle-banner";
+import { DealIntelligenceSection } from "@/components/quotations/DealIntelligenceSection";
 import {
     AddLineModal,
     type NewQuotationLineData,
@@ -802,6 +803,12 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
 
             {/* Customer Context Card */}
             <CustomerContextCard customer={quotation.customer} />
+
+            {/* Deal Intelligence V1 Section */}
+            <DealIntelligenceSection
+                quotationId={id}
+                refreshTrigger={refreshTrigger}
+            />
 
             {/* Main Deal Workspace Layout (2 columns: Lines Table vs Sidebar) */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

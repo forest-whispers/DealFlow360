@@ -6,6 +6,8 @@
  * from the backend createRouteHandler ({ message: string }).
  */
 
+import { API_ROUTES } from '@/config/api';
+
 export class ApiClientError extends Error {
     statusCode: number;
     data?: unknown;
@@ -106,4 +108,10 @@ export const apiClient = {
 
     delete: <T>(url: string, options?: RequestOptions) =>
         request<T>(url, { ...options, method: "DELETE" }),
+
+    // Deal Intelligence helpers
+    getDealHealth: <T>(quotationId: string) =>
+        request<T>(API_ROUTES.QUOTATIONS.DEAL_HEALTH(quotationId), { method: "GET" }),
+    getDealContext: <T>(quotationId: string) =>
+        request<T>(API_ROUTES.QUOTATIONS.DEAL_CONTEXT(quotationId), { method: "GET" }),
 };
