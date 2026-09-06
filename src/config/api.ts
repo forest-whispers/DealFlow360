@@ -10,6 +10,7 @@ export const API_BASE_URL: string =
 
 export const API_ROUTES = {
     BASE: API_BASE_URL,
+    DASHBOARD: `${API_BASE_URL}/dashboard`,
 
     AUTH: {
         SIGNUP: `${API_BASE_URL}/auth/signup`,
@@ -82,6 +83,8 @@ export const API_ROUTES = {
             `${API_BASE_URL}/quotations/${id}/approvals`,
         SEND: (id: string) =>
             `${API_BASE_URL}/quotations/${id}/send`,
+        COPILOT: (id: string) =>
+            `${API_BASE_URL}/quotations/${id}/ai/copilot`,
         DEAL_HEALTH: (id: string) =>
             `${API_BASE_URL}/quotations/${id}/deal-health`,
         DEAL_CONTEXT: (id: string) =>

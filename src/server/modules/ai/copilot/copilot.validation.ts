@@ -25,26 +25,26 @@ export type CopilotRequestInputDto = z.infer<typeof copilotRequestInputSchema>;
 const dealSummaryIntentSchema = z
     .object({
         type: z.literal(CopilotIntentType.DEAL_SUMMARY),
-    })
-    .strict();
+        negotiationMessage: z.string().nullable().optional(),
+    });
 
 const dealRiskIntentSchema = z
     .object({
         type: z.literal(CopilotIntentType.DEAL_RISK),
-    })
-    .strict();
+        negotiationMessage: z.string().nullable().optional(),
+    });
 
 const nextActionIntentSchema = z
     .object({
         type: z.literal(CopilotIntentType.NEXT_ACTION),
-    })
-    .strict();
+        negotiationMessage: z.string().nullable().optional(),
+    });
 
 const upsellIntentSchema = z
     .object({
         type: z.literal(CopilotIntentType.UPSELL),
-    })
-    .strict();
+        negotiationMessage: z.string().nullable().optional(),
+    });
 
 const negotiationAdviceIntentSchema = z
     .object({
@@ -53,14 +53,13 @@ const negotiationAdviceIntentSchema = z
             .string({ message: "negotiationMessage is required for NEGOTIATION_ADVICE." })
             .trim()
             .min(1, "negotiationMessage must not be empty."),
-    })
-    .strict();
+    });
 
 const unsupportedIntentSchema = z
     .object({
         type: z.literal(CopilotIntentType.UNSUPPORTED),
-    })
-    .strict();
+        negotiationMessage: z.string().nullable().optional(),
+    });
 
 export const copilotIntentSchema = z.discriminatedUnion("type", [
     dealSummaryIntentSchema,

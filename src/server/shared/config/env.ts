@@ -11,7 +11,7 @@ const envSchema = z.object({
       .string()
       .default("http://localhost:3000/api"),
     GEMINI_API_KEY: z.string().optional(),
-    GEMINI_MODEL: z.string().default("gemini-2.0-flash"),
+    GEMINI_MODEL: z.string().default("gemini-3.6-flash"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

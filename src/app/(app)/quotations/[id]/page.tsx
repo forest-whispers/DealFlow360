@@ -25,6 +25,7 @@ import { CommercialSummaryCard } from "@/components/quotations/commercial-summar
 import { GovernancePanel } from "@/components/quotations/governance-panel";
 import { DealLifecycleBanner } from "@/components/quotations/deal-lifecycle-banner";
 import { DealIntelligenceSection } from "@/components/quotations/DealIntelligenceSection";
+import { DealCopilot } from "@/components/quotations/DealCopilot";
 import {
     AddLineModal,
     type NewQuotationLineData,
@@ -41,6 +42,7 @@ import {
 import {
     AlertCircle,
     ArrowLeft,
+    Bot,
     Check,
     Package,
     Plus,
@@ -110,8 +112,9 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
     const [isSending, setIsSending] = useState<boolean>(false);
     const [submissionError, setSubmissionError] = useState<string | null>(null);
 
-    // Modals
+    // Modals & Panels
     const [isAddLineModalOpen, setIsAddLineModalOpen] = useState<boolean>(false);
+    const [isCopilotOpen, setIsCopilotOpen] = useState<boolean>(false);
 
     const isDraft = quotation?.status === "DRAFT";
     const canSendQuotation =
@@ -780,6 +783,19 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
                             ) : null}
                         </>
                     )}
+
+                    {/* AI Deal Copilot Action Trigger */}
+                    {currentUser && currentUser.role !== "CUSTOMER" && (
+                        <Button
+                            variant="outline"
+                            size="default"
+                            leftIcon={<Bot className="w-4 h-4 text-[#1E40AF]" />}
+                            onClick={() => setIsCopilotOpen(true)}
+                            className="border-[#BFDBFE] bg-[#EFF6FF]/60 hover:bg-[#EFF6FF] text-[#1E40AF] font-medium"
+                        >
+                            Deal Copilot
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -1060,6 +1076,14 @@ export default function QuotationDetailPage({ params }: QuotationDetailPageProps
                 isOpen={isAddLineModalOpen}
                 onClose={() => setIsAddLineModalOpen(false)}
                 onAddLine={handleAddLine}
+            />
+
+            {/* AI Deal Copilot Drawer */}
+            <DealCopilot
+                quotationId={id}
+                quoteNumber={quotation.quoteNumber}
+                isOpen={isCopilotOpen}
+                onClose={() => setIsCopilotOpen(false)}
             />
         </div>
     );

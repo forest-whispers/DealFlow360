@@ -114,4 +114,11 @@ export const apiClient = {
         request<T>(API_ROUTES.QUOTATIONS.DEAL_HEALTH(quotationId), { method: "GET" }),
     getDealContext: <T>(quotationId: string) =>
         request<T>(API_ROUTES.QUOTATIONS.DEAL_CONTEXT(quotationId), { method: "GET" }),
+    askDealCopilot: <T>(quotationId: string, message: string) =>
+        request<T>(API_ROUTES.QUOTATIONS.COPILOT(quotationId), {
+            method: "POST",
+            body: { message },
+        }),
+    getDashboard: <T>() =>
+        request<T>(API_ROUTES.DASHBOARD, { method: "GET" }),
 };
