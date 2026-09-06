@@ -165,6 +165,18 @@ export const CUSTOMER_MANAGE_ROLES = ["ADMIN", "SALES_MANAGER", "SALES_REP"];
 export const CUSTOMER_STATUS_ROLES = ["ADMIN", "SALES_MANAGER"];
 export const PRODUCT_MANAGE_ROLES = ["ADMIN", "SALES_MANAGER"];
 export const QUOTATION_MANAGE_ROLES = ["ADMIN", "SALES_MANAGER", "SALES_REP"];
+export const APPROVAL_NAV_ROLES = ["ADMIN", "SALES_MANAGER", "FINANCE_OPERATIONS"];
+
+export const APPROVAL_LEVEL_META: Record<string, { label: string; roles: string[] }> = {
+    SALES_MANAGER: {
+        label: "Sales Manager",
+        roles: ["ADMIN", "SALES_MANAGER"],
+    },
+    FINANCE_OPERATIONS: {
+        label: "Finance & Operations",
+        roles: ["ADMIN", "FINANCE_OPERATIONS"],
+    },
+};
 
 // ==========================================
 // Role Display Metadata

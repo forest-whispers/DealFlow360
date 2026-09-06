@@ -18,7 +18,7 @@ import {
     ChevronRight,
     Building2,
 } from "lucide-react";
-import { INTERNAL_NAV_SECTIONS, type NavItem } from "@/lib/constants";
+import { INTERNAL_NAV_SECTIONS, type NavItem, APPROVAL_NAV_ROLES } from "@/lib/constants";
 import { useAuth } from "@/context/auth-context";
 import { cn } from "@/lib/cn";
 
@@ -63,7 +63,14 @@ export function Sidebar({ isCollapsed, onToggleCollapse }: SidebarProps) {
                         )}
 
                         <div className="space-y-0.5">
-                            {section.items.map((item: NavItem) => {
+                            {section.items
+                                .filter((item: NavItem) => {
+                                    if (item.href === "/approvals") {
+                                        return Boolean(user && APPROVAL_NAV_ROLES.includes(user.role));
+                                    }
+                                    return true;
+                                })
+                                .map((item: NavItem) => {
                                 const isActive =
                                     pathname === item.href ||
                                     (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -146,6 +153,7 @@ export function MobileSidebar({
     onClose: () => void;
 }) {
     const pathname = usePathname();
+    const { user } = useAuth();
 
     if (!isOpen) return null;
 
@@ -177,7 +185,14 @@ export function MobileSidebar({
                                 {section.title}
                             </h4>
                             <div className="space-y-0.5">
-                                {section.items.map((item) => {
+                                {section.items
+                                    .filter((item: NavItem) => {
+                                        if (item.href === "/approvals") {
+                                            return Boolean(user && APPROVAL_NAV_ROLES.includes(user.role));
+                                        }
+                                        return true;
+                                    })
+                                    .map((item) => {
                                     const isActive =
                                         pathname === item.href ||
                                         (item.href !== "/dashboard" && pathname.startsWith(item.href));
