@@ -7,11 +7,12 @@ import {
     BILLING_STATUS_META,
     APPROVAL_STATUS_META,
     CUSTOMER_TIER_META,
+    CHANGE_REQUEST_STATUS_META,
     type StatusVariant,
 } from "@/lib/constants";
 
 export interface StatusBadgeProps extends Omit<BadgeProps, "variant"> {
-    type: "quotation" | "deal-health" | "fulfillment" | "billing" | "approval" | "tier";
+    type: "quotation" | "deal-health" | "fulfillment" | "billing" | "approval" | "tier" | "change-request";
     status: string;
     showLabel?: boolean;
 }
@@ -45,6 +46,9 @@ export function StatusBadge({
             break;
         case "tier":
             meta = CUSTOMER_TIER_META[status];
+            break;
+        case "change-request":
+            meta = CHANGE_REQUEST_STATUS_META[status];
             break;
     }
 

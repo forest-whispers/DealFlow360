@@ -94,7 +94,7 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
 
             {/* Portal Content Area */}
             <main className="flex-1 p-4 sm:p-8 bg-[#F8FAFC]">
-                <div className="max-w-5xl mx-auto w-full">
+                <div className="max-w-7xl mx-auto w-full">
                     {children}
                 </div>
             </main>
